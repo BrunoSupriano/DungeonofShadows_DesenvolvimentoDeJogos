@@ -34,11 +34,17 @@ const GRAVITY     = 0.55;
 const JUMP_POWER  = -14.5;
 const MOVE_SPEED  = 5;
 const TORCH_R     = 240;
+const TORCH_DRAIN = 0.0013;   // consumo da tocha por frame na fase do boss (~13s até apagar)
+const TORCH_DRAIN_NORMAL = 0.00035; // consumo lento nas fases comuns (~48s) — ensina a mecânica sem punir (item 8)
+const FIRE_REFUEL_R = 100;    // distância da fogueira para reacender a tocha
+const WALLTORCH_REFUEL_R = 92;// distância da tocha de parede para reacender a tocha do herói (item 9)
+const BOSS_HP     = 85;       // pontos de vida do boss final (item 29)
 let WORLD_W     = 4200;
 let WORLD_H     = 700;
 let PLATFORMS = [];
 let KEY_DEFS = [];
 let TOTAL_KEYS = 0;
+let HEART_DEFS = [];
 let ENEMY_DEFS = [];
 let WALL_TORCHES = [];
 let EXIT = {x:0, y:0};
@@ -75,10 +81,17 @@ const LEVELS = [
       {x:2920, y:310, w:50,  h:85},
     ],
     KEY_DEFS: [
-      {x:600,  y:458},
-      {x:1010, y:368},
-      {x:2510, y:398},
-      {x:2960, y:308},
+      {x:600,  y:458, memory:"Um rosto reflete na água escura... seria o meu?"},
+      {x:1010, y:368, memory:"Esta tocha. Minhas mãos a conhecem bem demais."},
+      {x:2510, y:398, memory:"Vozes me imploravam. Por que elas me culpam?"},
+      {x:2960, y:308, memory:"Fui eu quem escondeu estas chaves. Mas por quê?"},
+    ],
+    HEART_DEFS: [
+      {x:1290, y:330},        // recuperação no meio do percurso (item 17)
+    ],
+    CAMPFIRES: [
+      {x:430,  y:530, reward:'heart'},  // 1ª fogueira: ensina a acender e recompensa (itens A1/A3)
+      {x:2090, y:510},                  // 2ª fogueira: reforço opcional (item A7)
     ],
     ENEMY_DEFS: [
       {type:'ghost', x:410,  y:500, patrol:145},
@@ -97,13 +110,23 @@ const LEVELS = [
       {x:1650, y:350}, {x:2100, y:460}, {x:2600, y:335},
       {x:3000, y:290}, {x:3300, y:335}, {x:3580, y:510},
     ],
+    name: "FASE 1 — Despertar sem Nome",
     EXIT: {x:3720, y:490},
+    TUTORIAL_ZONES: [
+      { triggerX: 0,    text: "Use  A / D  (ou ← / →) para se mover" },
+      { triggerX: 340,  text: "Pressione  ESPAÇO  para pular nas plataformas" },
+      { triggerX: 380,  text: "Encoste sua tocha numa FOGUEIRA APAGADA (brasa pulsante) para acendê-la" },
+      { triggerX: 560,  text: "Pegue as CHAVES douradas que flutuam pelo caminho" },
+      { triggerX: 820,  text: "Cuidado! Fantasmas e morcegos custam um coração" },
+      { triggerX: 1300, text: "Recupere vida nos CORAÇÕES vermelhos pelo caminho" },
+      { triggerX: 1900, text: "Sua TOCHA enfraquece com o tempo — encoste nas TOCHAS DE PAREDE para reacendê-la" },
+      { triggerX: 2300, text: "Reúna TODAS as chaves..." },
+      { triggerX: 3450, text: "...e alcance a PORTA brilhante para escapar!" }
+    ],
+    opening: "Fase 1 — Quem sou eu?",
     STORY_ZONES: [
-      { triggerX: 100, text: "Onde estou? Tudo está tão frio..." },
-      { triggerX: 800, text: "Eu ouço os sussurros nas sombras." },
-      { triggerX: 1600, text: "Eles me observam... esperando." },
-      { triggerX: 2500, text: "Preciso encontrar as chaves para fugir." },
-      { triggerX: 3400, text: "A saída... Está próxima!" }
+      { triggerX: 100,  text: "Onde estou? Por que não lembro de nada?" },
+      { triggerX: 3400, text: "Cada passo desperta algo adormecido em mim." }
     ]
   },
   {
@@ -131,10 +154,19 @@ const LEVELS = [
       {x:2500, y:480, w:40, h:220},
     ],
     KEY_DEFS: [
-      {x:450,  y:410},
-      {x:1750, y:290},
-      {x:3100, y:210},
-      {x:3600, y:410},
+      {x:450,  y:410, memory:"A Sombra não veio de fora. Ela cresceu dentro de alguém."},
+      {x:1750, y:290, memory:"Quanto mais funda a escuridão, mais forte ela fica."},
+      {x:3100, y:210, memory:"Eu a prendi com luz. Era a única forma de detê-la."},
+      {x:3600, y:410, memory:"Se ela escapar, toda esta luz se apaga para sempre."},
+    ],
+    HEART_DEFS: [
+      {x:1900, y:360},        // recuperação antes do trecho escuro (item 17)
+    ],
+    CAMPFIRES: [
+      // Trecho escuro 2200–3000: acender as fogueiras ilumina o caminho e afasta as sombras (item A4)
+      {x:2300, y:480},
+      {x:2650, y:400},
+      {x:2850, y:320},
     ],
     ENEMY_DEFS: [
       {type:'ghost', x:750,  y:520, patrol:200},
@@ -144,85 +176,86 @@ const LEVELS = [
       {type:'bat',   x:1300, y:150, patrol:300},
       {type:'bat',   x:2700, y:100, patrol:250},
       {type:'bat',   x:3400, y:150, patrol:200},
+      // Mini-sombras: recuam e sofrem dano com a luz da tocha — ensinam "luz = arma" (itens 10/11)
+      {type:'shade', x:2400, y:430, patrol:120},
+      {type:'shade', x:2950, y:280, patrol:120},
     ],
     WALL_TORCHES: [
       {x:100,  y:510}, {x:800,  y:510}, {x:1300, y:430},
-      {x:1800, y:270}, {x:2350, y:430}, {x:3100, y:190},
-      {x:3900, y:490},
+      {x:1800, y:270}, {x:3100, y:190}, {x:3900, y:490},
+      // (trecho 2200–3000 deixado às escuras de propósito: arena das mini-sombras)
     ],
+    name: "FASE 2 — A Sombra Cresce",
     EXIT: {x:3950, y:470},
+    TUTORIAL_ZONES: [
+      { triggerX: 100,  text: "Mantenha a TOCHA acesa nas tochas de parede — no escuro, algo se aproxima" },
+      { triggerX: 2150, text: "Escuridão à frente! ACENDA as fogueiras para iluminar o caminho" },
+      { triggerX: 2400, text: "As SOMBRAS recuam da luz! Encare-as de FRENTE com a tocha acesa" },
+      { triggerX: 3050, text: "Acender o fogo será sua arma contra o que aguarda adiante..." }
+    ],
+    opening: "Fase 2 — O que há na escuridão?",
     STORY_ZONES: [
-      { triggerX: 100, text: "As masmorras não têm fim..." },
-      { triggerX: 1000, text: "A escuridão parece mais pesada agora." },
-      { triggerX: 2000, text: "Quem os aprisionou aqui?" },
-      { triggerX: 3000, text: "Sinto o hálito da morte nos meus calcanhares." }
+      { triggerX: 100,  text: "Mais fundo. Aqui a escuridão tem peso." },
+      { triggerX: 3000, text: "Algo me observa nas trevas. E me conhece." }
     ]
   },
   {
-    WORLD_W: 4500,
+    name: "FASE 3 — O Que Eu Selei",
+    opening: "Fase 3 — O que eu selei?",
+    isBoss: true,
+    WORLD_W: 1800,
     WORLD_H: 700,
     PLATFORMS: [
-      {x:0,    y:560, w:150, h:40},
-      {x:220,  y:480, w:80,  h:20},
-      {x:380,  y:400, w:80,  h:20},
-      {x:540,  y:320, w:80,  h:20},
-      {x:700,  y:240, w:200, h:20},
-      {x:1000, y:300, w:100, h:20},
-      {x:1200, y:380, w:100, h:20},
-      {x:1400, y:460, w:100, h:20},
-      {x:1600, y:540, w:300, h:40},
-      {x:2000, y:460, w:100, h:20},
-      {x:2200, y:380, w:100, h:20},
-      {x:2400, y:300, w:150, h:20},
-      {x:2650, y:240, w:100, h:20},
-      {x:2850, y:320, w:100, h:20},
-      {x:3050, y:400, w:150, h:20},
-      {x:3300, y:480, w:100, h:20},
-      {x:3500, y:400, w:100, h:20},
-      {x:3700, y:320, w:150, h:20},
-      {x:3950, y:400, w:100, h:20},
-      {x:4150, y:540, w:300, h:40},
-      {x:700,  y:260, w:40, h:440},
-      {x:1600, y:400, w:40, h:140},
-      {x:2400, y:320, w:40, h:380},
+      {x:0,    y:600, w:1800, h:90},   // chão da sala
+      {x:-30,  y:0,   w:30,   h:700},  // parede esquerda
+      {x:1800, y:0,   w:30,   h:700},  // parede direita
+      {x:250,  y:470, w:150,  h:22},
+      {x:820,  y:420, w:200,  h:22},
+      {x:1410, y:470, w:150,  h:22},
+      {x:560,  y:330, w:140,  h:20},
+      {x:1080, y:330, w:140,  h:20},
     ],
-    KEY_DEFS: [
-      {x:780,  y:210},
-      {x:1750, y:510},
-      {x:2450, y:270},
-      {x:3750, y:290},
-    ],
+    KEY_DEFS: [],
     ENEMY_DEFS: [
-      {type:'bat',   x:450,  y:150, patrol:250},
-      {type:'bat',   x:1100, y:150, patrol:200},
-      {type:'ghost', x:1650, y:500, patrol:200},
-      {type:'ghost', x:2700, y:200, patrol:150},
-      {type:'bat',   x:3100, y:150, patrol:250},
-      {type:'bat',   x:3600, y:100, patrol:200},
-      {type:'ghost', x:4200, y:500, patrol:150},
-      {type:'bat',   x:2000, y:250, patrol:200},
-      {type:'bat',   x:2500, y:150, patrol:150},
-      {type:'ghost', x:3350, y:440, patrol:100},
+      {type:'bat', x:400,  y:200, patrol:320},
+      {type:'bat', x:1300, y:170, patrol:320},
     ],
-    WALL_TORCHES: [
-      {x:50,   y:510}, {x:800,  y:190}, {x:1700, y:490},
-      {x:2450, y:250}, {x:3100, y:350}, {x:3750, y:270},
-      {x:4250, y:490},
+    WALL_TORCHES: [],
+    CAMPFIRES: [
+      // Chão (refúgios e luz baixa)
+      {x:150,  y:600},        // refúgio inicial, perto do spawn
+      {x:900,  y:600},
+      {x:1650, y:600},
+      // Elevadas sobre plataformas: a luz sobe até a faixa de combate do boss (item 6)
+      {x:325,  y:470},
+      {x:890,  y:420},
+      {x:1485, y:470},
+      {x:630,  y:330},
+      {x:1150, y:330},
     ],
-    EXIT: {x:4350, y:470},
-    STORY_ZONES: [
-      { triggerX: 100, text: "O coração das sombras." },
-      { triggerX: 1000, text: "Eles tentaram me avisar..." },
-      { triggerX: 2000, text: "A sanidade se esvai a cada passo." },
-      { triggerX: 3000, text: "Apenas mais um pouco... A luz verdadeira." },
-      { triggerX: 4000, text: "Fim do pesadelo... Ou será o começo?" }
-    ]
+    BOSS: {x:850, y:340},
+    EXIT: {x:880, y:580},
+    STORY_ZONES: []
   }
 ];
 
 let currentLevelIndex = 0;
 let currentStoryText = "";
 let storyAlpha = 0;
+let currentTutorialText = "";
+let TUTORIAL_ZONES = [];
+let nearUnlitFire = false;   // herói perto de fogueira apagada com tocha fraca → dica contextual (item A6)
+let pendingOpening = null;   // linha de narrativa mostrada ao ENTRAR numa fase nova (não em retry) (item B19)
+
+// Texto da história introdutória (tela preta)
+const INTRO_STORY = [
+  "Você desperta numa masmorra esquecida pelo tempo.",
+  "Não lembra seu nome. Nem como veio parar aqui.",
+  "Resta só a chama trêmula de uma tocha em sua mão.",
+  "Algo se move na escuridão — e recua diante da luz.",
+  "Encontre as chaves. Cada uma guarda algo que você esqueceu.",
+  "Atravesse as sombras e descubra a verdade.",
+];
 
 // ── Input ─────────────────────────────────────────────────────────────────────
 const input = {};
@@ -254,6 +287,8 @@ class Player {
     this.won  = false;
     this.keys = 0;
     this.tick = 0;
+    this.torchFuel = 1;    // 1 = tocha plena; decai com o tempo (lento nas fases comuns)
+    this.cpx = x; this.cpy = y;  // checkpoint: última posição segura (itens 15/16/20)
   }
   get rect() { return {x:this.x, y:this.y, w:this.w, h:this.h}; }
 
@@ -283,18 +318,28 @@ class Player {
     }
 
     this.x = clamp(this.x, 0, WORLD_W - this.w);
-    if (this.y > WORLD_H) this.hurt();
+    if (this.y > WORLD_H) this.fall();
     if (this.inv > 0) this.inv--;
     this.tick++;
   }
 
   jump() { if (this.onGround) this.vy = JUMP_POWER; }
 
-  hurt() {
-    if (this.inv > 0) return;
+  // Dano de contato: tira vida e empurra o herói no local, sem perder o progresso (item 14)
+  hurt(knockDir = 0) {
+    if (this.inv > 0 || this.dead) return;
     this.hp--;
     this.inv = 95;
-    this.x = 50; this.y = 490;
+    if (knockDir !== 0) { this.vx = knockDir * 6; this.vy = -7; }
+    if (this.hp <= 0) this.dead = true;
+  }
+
+  // Queda em abismo: volta ao último checkpoint seguro (itens 15/16/20)
+  fall() {
+    if (this.dead) return;
+    this.hp--;
+    this.inv = 95;
+    this.x = this.cpx; this.y = this.cpy;
     this.vx = 0; this.vy = 0;
     if (this.hp <= 0) this.dead = true;
   }
@@ -515,10 +560,11 @@ class Bat {
 
 // ─────────────────────────────────────────────────────────────────────────────
 class KeyItem {
-  constructor(x, y) {
+  constructor(x, y, memory) {
     this.x = x; this.y = y;
     this.collected = false;
     this.t = rng(0, 60);
+    this.memory = memory || null;   // fragmento de memória revelado ao coletar (item B10)
   }
   draw(ctx, cx, cy) {
     if (this.collected) return;
@@ -556,6 +602,123 @@ class KeyItem {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Coração coletável: recupera 1 ponto de vida (item 17)
+class Heart {
+  constructor(x, y) {
+    this.x = x; this.y = y;
+    this.collected = false;
+    this.t = rng(0, 60);
+  }
+  get rect() { return {x:this.x - 12, y:this.y - 12, w:26, h:26}; }
+  draw(ctx, cx, cy) {
+    if (this.collected) return;
+    this.t++;
+    const sx = Math.floor(this.x - cx);
+    const sy = Math.floor(this.y - cy + Math.sin(this.t * 0.07) * 5);
+    if (sx < -40 || sx > SW + 40) return;
+    const pulse = 1 + Math.sin(this.t * 0.12) * 0.08;
+    ctx.save();
+    ctx.translate(sx, sy);
+    ctx.scale(pulse, pulse);
+    ctx.shadowColor = 'rgba(220,30,40,0.8)';
+    ctx.shadowBlur = 14;
+    ctx.fillStyle = '#e21824';
+    ctx.beginPath();
+    ctx.moveTo(0, 4);
+    ctx.bezierCurveTo(0, -5, -11, -5, -11, 2);
+    ctx.bezierCurveTo(-11, 9, 0, 15, 0, 18);
+    ctx.bezierCurveTo(0, 15, 11, 9, 11, 2);
+    ctx.bezierCurveTo(11, -5, 0, -5, 0, 4);
+    ctx.fill();
+    ctx.restore();
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Mini-sombra (Fase 2): persegue no escuro, recua e sofre dano na luz da tocha.
+// Ensina, antes do boss, que a luz é a arma do herói (itens 10/11).
+class Shade {
+  constructor(x, y, patrol) {
+    this.x = x; this.y = y;
+    this.bx = x; this.by = y;
+    this.w = 30; this.h = 46;
+    this.patrol = patrol || 120;
+    this.t = rng(0, 60);
+    this.alive = true;
+    this.hp = 3;
+    this.flash = 0;
+    this.dieT = 0;
+    this.vx = 0;
+  }
+  get rect() { return {x:this.x + 6, y:this.y + 8, w:this.w - 12, h:this.h - 16}; }
+  get cxp()  { return this.x + this.w / 2; }
+  get cyp()  { return this.y + this.h / 2; }
+  update(player) {
+    this.t++;
+    if (!this.alive) { this.dieT++; return; }
+
+    const ptx = player.x + player.w / 2 + player.facing * 16;
+    const pty = player.y + 18;
+    const dx = this.cxp - ptx, dy = this.cyp - pty;
+    const d = Math.hypot(dx, dy) || 1;
+    const R = 155;
+
+    if (d < R && player.torchFuel > 0.05) {
+      // Na luz: recua e definha
+      const f = (1 - d / R) * player.torchFuel;
+      this.hp -= f * 0.05;
+      this.flash = 5;
+      this.x += (dx / d) * 2.6 * f;
+      this.y = clamp(this.y + (dy / d) * 1.4 * f, this.by - 40, this.by + 40);
+      if (this.hp <= 0) { this.hp = 0; this.alive = false; }
+    } else {
+      // No escuro: avança devagar e flutua para o jogador
+      const tx = (player.x + player.w / 2) - this.cxp;
+      this.vx = lerp(this.vx, Math.sign(tx) * 0.9, 0.04);
+      this.x += this.vx;
+      this.x = clamp(this.x, this.bx - this.patrol, this.bx + this.patrol);
+      this.y = this.by + Math.sin(this.t * 0.05) * 8;
+    }
+    if (this.flash > 0) this.flash--;
+  }
+  draw(ctx, cx, cy) {
+    if (!this.alive && this.dieT > 60) return;
+    const sx = Math.floor(this.x - cx);
+    const sy = Math.floor(this.y - cy);
+    if (sx < -60 || sx > SW + 60) return;
+    const cxp = sx + this.w / 2;
+
+    ctx.save();
+    if (!this.alive) ctx.globalAlpha = Math.max(0, 1 - this.dieT / 60);
+    ctx.shadowColor = this.flash > 0 ? 'rgba(255,120,40,0.85)' : 'rgba(70,0,110,0.85)';
+    ctx.shadowBlur = 16;
+
+    // Manto
+    const sway = Math.sin(this.t * 0.08) * 4;
+    ctx.fillStyle = this.flash > 0 ? '#5a2424' : '#16091f';
+    ctx.beginPath();
+    ctx.moveTo(cxp, sy);
+    ctx.quadraticCurveTo(sx - 4 + sway, sy + this.h * 0.5, sx + 4, sy + this.h);
+    for (let i = 0; i <= 4; i++) {
+      const fx = sx + 4 + (this.w - 8) * (i / 4);
+      const fy = sy + this.h + Math.sin(this.t * 0.13 + i) * 6;
+      ctx.lineTo(fx, fy);
+    }
+    ctx.quadraticCurveTo(sx + this.w + 4 - sway, sy + this.h * 0.5, cxp, sy);
+    ctx.closePath();
+    ctx.fill();
+    ctx.shadowBlur = 0;
+
+    // Olhos
+    const eyeC = this.flash > 0 ? '#ff5500' : '#c0008a';
+    ctx.fillStyle = eyeC; ctx.shadowColor = eyeC; ctx.shadowBlur = 12;
+    ctx.beginPath(); ctx.ellipse(cxp - 6, sy + 16, 2.5, 5, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(cxp + 6, sy + 16, 2.5, 5, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 class Spark {
   constructor(x, y) {
     this.x = x; this.y = y;
@@ -581,10 +744,264 @@ class Spark {
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Fogueira do cenário (Fase do Boss): pode ser acesa com a tocha e apaga sozinha
+class Campfire {
+  constructor(x, y, reward) {
+    this.x = x; this.y = y;
+    this.lit = false;
+    this.t = rng(0, 60);
+    this.eternal = false;     // fogueiras apagáveis: o vento as apaga, o herói as reacende (item 1)
+    this.radius = 185;        // luz de cada fogueira (item 6 — várias alturas cobrem a arena)
+    this.reward = reward || null;   // 'heart' → solta um coração ao ser acesa (item A3)
+    this.rewardGiven = false;
+  }
+  get flameX() { return this.x; }
+  get flameY() { return this.y - 20; }
+  light() {
+    if (this.lit) return false;
+    this.lit = true;
+    return true;
+  }
+  extinguish() { if (!this.eternal) this.lit = false; }
+  update() {
+    this.t++;
+  }
+  draw(ctx, cx, cy) {
+    const sx = Math.floor(this.x - cx);
+    const sy = Math.floor(this.y - cy);
+    if (sx < -60 || sx > SW + 60) return;
+
+    // Lenha
+    ctx.strokeStyle = '#3a2412';
+    ctx.lineWidth = 5;
+    ctx.beginPath(); ctx.moveTo(sx - 14, sy); ctx.lineTo(sx + 10, sy - 9); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(sx + 14, sy); ctx.lineTo(sx - 10, sy - 9); ctx.stroke();
+    ctx.fillStyle = '#241608';
+    ctx.fillRect(sx - 16, sy - 3, 32, 6);
+
+    if (this.lit) {
+      const w1 = Math.sin(this.t * 0.30) * 4;
+      const w2 = Math.sin(this.t * 0.41 + 1) * 4;
+      const hh = 30 + Math.sin(this.t * 0.5) * 5;
+      // Brasas
+      ctx.fillStyle = '#ff7b00';
+      ctx.fillRect(sx - 9, sy - 7, 18, 5);
+      // Chama externa
+      ctx.beginPath();
+      ctx.moveTo(sx - 11, sy - 5);
+      ctx.lineTo(sx - 4 + w1, sy - hh * 0.6);
+      ctx.lineTo(sx, sy - hh);
+      ctx.lineTo(sx + 4 + w2, sy - hh * 0.6);
+      ctx.lineTo(sx + 11, sy - 5);
+      ctx.closePath();
+      ctx.fillStyle = '#ffce38';
+      ctx.fill();
+      // Chama interna
+      ctx.beginPath();
+      ctx.moveTo(sx - 5, sy - 5);
+      ctx.lineTo(sx + w1 * 0.6, sy - hh * 0.7);
+      ctx.lineTo(sx + 5, sy - 5);
+      ctx.closePath();
+      ctx.fillStyle = '#ff5a00';
+      ctx.fill();
+    } else {
+      // Fumaça da fogueira apagada
+      ctx.fillStyle = 'rgba(120,120,135,0.22)';
+      ctx.beginPath();
+      ctx.arc(sx, sy - 16 - (this.t * 0.2 % 14), 4 + Math.sin(this.t * 0.05) * 2, 0, Math.PI * 2);
+      ctx.fill();
+      // Brasa pulsante: sinaliza que a fogueira é INTERATIVA (acendível) (item A5)
+      const glow = 0.35 + Math.sin(this.t * 0.08) * 0.25;
+      ctx.save();
+      ctx.shadowColor = 'rgba(255,120,30,0.8)';
+      ctx.shadowBlur = 10 + glow * 10;
+      ctx.fillStyle = `rgba(255,${(90 + glow * 60) | 0},20,${0.5 + glow * 0.4})`;
+      ctx.fillRect(sx - 6, sy - 6, 12, 4);
+      ctx.restore();
+    }
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Boss final: "A Sombra". Persegue na escuridão, foge e sofre dano na luz.
+class Boss {
+  constructor(x, y) {
+    this.x = x; this.y = y;
+    this.w = 76; this.h = 104;
+    this.vx = 0; this.vy = 0;
+    this.t = 0;
+    this.maxHp = BOSS_HP;
+    this.hp = BOSS_HP;
+    this.alive = true;
+    this.inLight = false;
+    this.flash = 0;
+    this.dieT = 0;
+    this.lungeT = 120;        // contagem para a próxima investida
+  }
+  get rect() { return {x:this.x + 16, y:this.y + 12, w:this.w - 32, h:this.h - 24}; }
+  get cx()   { return this.x + this.w / 2; }
+  get cy()   { return this.y + this.h / 2; }
+
+  update(player, campfires) {
+    this.t++;
+    if (!this.alive) { this.dieT++; return; }
+
+    // ── Exposição à luz (tocha do jogador + fogueiras acesas) ──
+    let exposure = 0, fleeX = 0, fleeY = 0;
+
+    const ptx = player.x + player.w / 2 + player.facing * 16;
+    const pty = player.y + 18;
+    const pdx = this.cx - ptx, pdy = this.cy - pty;
+    const pdist = Math.hypot(pdx, pdy) || 1;
+    const PTORCH_R = 150;
+    if (pdist < PTORCH_R) {
+      // A tocha do herói só fere/afugenta a Sombra na medida em que está acesa
+      const f = (1 - pdist / PTORCH_R) * player.torchFuel;
+      exposure += f * 0.5;                 // tocha do jogador: dano fraco
+      fleeX += (pdx / pdist) * f;
+      fleeY += (pdy / pdist) * f;
+    }
+    for (const cf of campfires) {
+      if (!cf.lit) continue;
+      const dx = this.cx - cf.flameX, dy = this.cy - cf.flameY;
+      const d = Math.hypot(dx, dy) || 1;
+      if (d < cf.radius) {
+        const f = 1 - d / cf.radius;
+        exposure += f;                     // fogueiras: dano forte
+        fleeX += (dx / d) * f;
+        fleeY += (dy / d) * f;
+      }
+    }
+
+    // Faixa de combate: acompanha o jogador, nunca foge para o teto inalcançável
+    const pcy = player.y + player.h / 2;
+    const desiredY = clamp(pcy - 90, 150, 430);
+
+    this.inLight = exposure > 0.02;
+    if (this.inLight) {
+      this.hp -= exposure * 0.9;
+      this.flash = 10;            // flash mais forte: deixa claro que a luz está ferindo (item 18)
+      if (this.hp <= 0) { this.hp = 0; this.alive = false; }
+      // Foge na HORIZONTAL (mantém-se na faixa de combate → pode ser encurralado)
+      const sgn = fleeX >= 0 ? 1 : -1;
+      this.vx = lerp(this.vx, sgn * 2.8, 0.14);
+      this.vy = lerp(this.vy, (desiredY - this.cy) * 0.04, 0.10);
+      this.lungeT = 90;
+    } else {
+      // Persegue o jogador; investidas periódicas o forçam para baixo, à luz.
+      // Quanto mais fraca a tocha do herói, mais ousada e veloz fica a Sombra.
+      const darkBoldness = 1 + (1 - player.torchFuel) * 0.55;   // até +55% no escuro (item 21 — justo após o vento)
+      const dx = (player.x + player.w / 2) - this.cx;
+      const d  = Math.abs(dx) || 1;
+      this.lungeT--;
+      const lunging = this.lungeT < 24;
+      const spd = (lunging ? 4.2 : 2.2) * darkBoldness;
+      this.vx = lerp(this.vx, (dx / d) * spd, lunging ? 0.12 : 0.05);
+      const dyT = (lunging ? pcy : desiredY) - this.cy;
+      this.vy = lerp(this.vy, dyT * 0.05, 0.06);
+      if (this.lungeT <= 0) {
+        const base = 150 + (rng(0, 90) | 0);
+        this.lungeT = (player.torchFuel > 0.4 ? base : base * 0.55) | 0;  // investe mais no escuro
+      }
+    }
+    if (this.flash > 0) this.flash--;
+
+    this.x += this.vx;
+    this.y += this.vy;
+    this.x = clamp(this.x, 20, WORLD_W - this.w - 20);
+    this.y = clamp(this.y, 60, 470);
+  }
+
+  draw(ctx, cx, cy) {
+    const sx = Math.floor(this.x - cx);
+    const sy = Math.floor(this.y - cy);
+    const cxp = sx + this.w / 2;
+
+    ctx.save();
+    if (!this.alive) ctx.globalAlpha = Math.max(0, 1 - this.dieT / 120);
+
+    // Aura
+    ctx.shadowColor = this.inLight ? 'rgba(255,120,40,0.85)' : 'rgba(70,0,110,0.9)';
+    ctx.shadowBlur  = this.inLight ? 32 : 26;
+
+    // Manto esvoaçante
+    const sway = Math.sin(this.t * 0.06) * 6;
+    ctx.fillStyle = this.flash > 0 ? '#6a2a2a' : '#140820';
+    ctx.beginPath();
+    ctx.moveTo(cxp, sy);
+    ctx.quadraticCurveTo(sx - 8 + sway, sy + this.h * 0.5, sx + 6, sy + this.h);
+    for (let i = 0; i <= 6; i++) {
+      const fx = sx + 6 + (this.w - 12) * (i / 6);
+      const fy = sy + this.h + Math.sin(this.t * 0.12 + i) * 8;
+      ctx.lineTo(fx, fy);
+    }
+    ctx.quadraticCurveTo(sx + this.w + 8 - sway, sy + this.h * 0.5, cxp, sy);
+    ctx.closePath();
+    ctx.fill();
+    ctx.shadowBlur = 0;
+
+    // Capuz
+    ctx.fillStyle = this.flash > 0 ? '#7a3a3a' : '#0c0414';
+    ctx.beginPath();
+    ctx.ellipse(cxp, sy + 32, 27, 34, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Olhos
+    const eyeC = this.inLight ? '#ff5500' : '#d40090';
+    ctx.fillStyle = eyeC;
+    ctx.shadowColor = eyeC; ctx.shadowBlur = 16;
+    ctx.beginPath(); ctx.ellipse(cxp - 10, sy + 30, 4, 8, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(cxp + 10, sy + 30, 4, 8, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  }
+}
+
 // ── Sistema de Áudio (Web Audio API – Procedural) ────────────────────────────
 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 let audioStarted = false;
+let audioMuted = false;
 let droneGain = null, flameGain = null;
+
+// ── Barramento principal: tudo passa por master → compressor → destino (itens C22/C26) ──
+// O compressor cola os picos somados dos vários loops e evita o clipping/distorção do fundo.
+const masterGain = audioCtx.createGain();
+masterGain.gain.value = 0.85;
+const masterComp = audioCtx.createDynamicsCompressor();
+masterComp.threshold.setValueAtTime(-18, audioCtx.currentTime);
+masterComp.knee.setValueAtTime(22, audioCtx.currentTime);
+masterComp.ratio.setValueAtTime(3.5, audioCtx.currentTime);
+masterComp.attack.setValueAtTime(0.005, audioCtx.currentTime);
+masterComp.release.setValueAtTime(0.25, audioCtx.currentTime);
+masterGain.connect(masterComp);
+masterComp.connect(audioCtx.destination);
+
+// Reverb curto de ambiência (item C27): tira o som "seco" de masmorra.
+function makeImpulse(sec, decay) {
+  const len = (audioCtx.sampleRate * sec) | 0;
+  const buf = audioCtx.createBuffer(2, len, audioCtx.sampleRate);
+  for (let ch = 0; ch < 2; ch++) {
+    const d = buf.getChannelData(ch);
+    for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, decay);
+  }
+  return buf;
+}
+const reverb = audioCtx.createConvolver();
+reverb.buffer = makeImpulse(1.8, 2.6);
+reverb.connect(masterComp);   // saída do reverb entra depois do master (não realimenta)
+
+// Manda uma porção de um nó ao reverb (sinal "molhado")
+function sendToReverb(node, amount) {
+  const s = audioCtx.createGain();
+  s.gain.value = amount;
+  node.connect(s); s.connect(reverb);
+}
+
+function setMuted(m) {
+  audioMuted = m;
+  masterGain.gain.setTargetAtTime(m ? 0.0001 : 0.85, audioCtx.currentTime, 0.05);
+  if (ghostAudio) ghostAudio.muted = m;
+}
 
 function createNoiseBuffer(sec) {
   const buf = audioCtx.createBuffer(1, audioCtx.sampleRate * sec | 0, audioCtx.sampleRate);
@@ -594,94 +1011,103 @@ function createNoiseBuffer(sec) {
 }
 
 function startDrone() {
+  if (droneGain) return;            // guarda anti-empilhamento: o drone toca contínuo entre fases (item C21)
   const osc    = audioCtx.createOscillator();
+  const osc2   = audioCtx.createOscillator();   // segunda voz grave, uma quinta abaixo → drone mais "vivo"
   const filter = audioCtx.createBiquadFilter();
   const gain   = audioCtx.createGain();
   const lfo    = audioCtx.createOscillator();
   const lfoG   = audioCtx.createGain();
 
-  lfo.frequency.setValueAtTime(0.25, audioCtx.currentTime);
-  lfoG.gain.setValueAtTime(6, audioCtx.currentTime);
-  lfo.connect(lfoG); lfoG.connect(osc.frequency); lfo.start();
+  lfo.frequency.setValueAtTime(0.12, audioCtx.currentTime);   // oscilação mais lenta e sutil
+  lfoG.gain.setValueAtTime(4, audioCtx.currentTime);          // menos profundidade → menos batimento dissonante
+  lfo.connect(lfoG); lfoG.connect(osc.frequency); lfoG.connect(osc2.frequency); lfo.start();
 
-  osc.type = 'sawtooth';
-  osc.frequency.setValueAtTime(55, audioCtx.currentTime);
+  osc.type  = 'sawtooth'; osc.frequency.setValueAtTime(55, audioCtx.currentTime);
+  osc2.type = 'sine';     osc2.frequency.setValueAtTime(41.2, audioCtx.currentTime);
   filter.type = 'lowpass';
-  filter.frequency.setValueAtTime(220, audioCtx.currentTime);
-  gain.gain.setValueAtTime(0.001, audioCtx.currentTime);
-  gain.gain.linearRampToValueAtTime(0.07, audioCtx.currentTime + 1.5);
+  filter.frequency.setValueAtTime(170, audioCtx.currentTime);
+  gain.gain.setValueAtTime(0.0001, audioCtx.currentTime);
+  gain.gain.linearRampToValueAtTime(0.06, audioCtx.currentTime + 2.0);   // fade-in (item C28)
 
-  osc.connect(filter); filter.connect(gain); gain.connect(audioCtx.destination);
-  osc.start();
-  droneGain = { gain, osc, lfo };
+  osc.connect(filter); osc2.connect(filter); filter.connect(gain); gain.connect(masterGain);
+  sendToReverb(gain, 0.12);
+  osc.start(); osc2.start();
+  droneGain = { gain, osc, osc2, lfo };
 }
 
 function startFlame() {
+  if (flameGain) return;            // guarda anti-empilhamento (item C21)
   const src    = audioCtx.createBufferSource();
   src.buffer   = createNoiseBuffer(2);
   src.loop     = true;
   const filter = audioCtx.createBiquadFilter();
   filter.type  = 'bandpass';
-  filter.frequency.setValueAtTime(900, audioCtx.currentTime);
-  filter.Q.setValueAtTime(0.4, audioCtx.currentTime);
+  filter.frequency.setValueAtTime(520, audioCtx.currentTime);  // mais grave e "abafado", menos estática (item C24)
+  filter.Q.setValueAtTime(1.4, audioCtx.currentTime);          // banda mais estreita = chama, não chiado
+  // LFO lento na frequência do filtro → a chama "respira" em vez de ruído fixo
+  const fLfo = audioCtx.createOscillator();
+  const fLfoG = audioCtx.createGain();
+  fLfo.frequency.setValueAtTime(0.33, audioCtx.currentTime);
+  fLfoG.gain.setValueAtTime(120, audioCtx.currentTime);
+  fLfo.connect(fLfoG); fLfoG.connect(filter.frequency); fLfo.start();
   const gain   = audioCtx.createGain();
-  gain.gain.setValueAtTime(0.001, audioCtx.currentTime);
-  gain.gain.linearRampToValueAtTime(0.05, audioCtx.currentTime + 1.5);
+  gain.gain.setValueAtTime(0.0001, audioCtx.currentTime);
+  gain.gain.linearRampToValueAtTime(0.028, audioCtx.currentTime + 1.5);  // bem mais baixo (item C26)
 
-  src.connect(filter); filter.connect(gain); gain.connect(audioCtx.destination);
+  src.connect(filter); filter.connect(gain); gain.connect(masterGain);
+  sendToReverb(gain, 0.10);
   src.start();
-  flameGain = { gain, src };
+  flameGain = { gain, src, fLfo };
 }
 
 // ── Sons de Proximidade (fantasmas e morcegos) ────────────────────────────────
-let ghostProxGain = null;
-let batProxGain   = null;
-const PROX_RANGE  = 380; // pixels de alcance do som
+let ghostAudio  = null;  // som real do fantasma (arquivo em loop)
+let batProxGain = null;
+const PROX_RANGE      = 380;  // pixels de alcance do som
+const GHOST_MAX_VOL   = 0.55; // volume máximo do fantasma quando bem próximo (item C26)
 
 function initProximityAudio() {
-  // --- Fantasma: dois osciladores levemente desafinados criam batimento sinistro ---
-  const g1  = audioCtx.createOscillator();
-  const g2  = audioCtx.createOscillator();
-  const lfo = audioCtx.createOscillator();
-  const lfoG= audioCtx.createGain();
-  const gFlt= audioCtx.createBiquadFilter();
-  const gGain = audioCtx.createGain();
+  // --- Fantasma: som real de "vozes fantasmagóricas" tocado em loop ---
+  // Áudio: "ghostly voices" por ERH (freesound.org/people/ERH/sounds/36757) — licença CC BY 3.0
+  if (!ghostAudio) {
+    ghostAudio = new Audio('assets/sounds/ghost.mp3');
+    ghostAudio.loop    = true;
+    ghostAudio.preload = 'auto';
+    ghostAudio.volume  = 0;
+  }
+  // play() exige um gesto do usuário; já estamos dentro de um (keydown). Ignora bloqueio de autoplay.
+  ghostAudio.play().catch(() => {});
 
-  g1.type = 'sine'; g1.frequency.setValueAtTime(165, audioCtx.currentTime);
-  g2.type = 'sine'; g2.frequency.setValueAtTime(171, audioCtx.currentTime); // +6 Hz → batimento etéreo
-  lfo.frequency.setValueAtTime(4.2, audioCtx.currentTime);
-  lfoG.gain.setValueAtTime(14, audioCtx.currentTime);
-  lfo.connect(lfoG); lfoG.connect(g1.frequency); lfoG.connect(g2.frequency);
-  gFlt.type = 'bandpass'; gFlt.frequency.setValueAtTime(180, audioCtx.currentTime); gFlt.Q.setValueAtTime(2, audioCtx.currentTime);
-  gGain.gain.setValueAtTime(0, audioCtx.currentTime);
-
-  g1.connect(gFlt); g2.connect(gFlt); gFlt.connect(gGain); gGain.connect(audioCtx.destination);
-  g1.start(); g2.start(); lfo.start();
-  ghostProxGain = gGain;
-
-  // --- Morcego: sawtooth agudo com tremolo rápido (chiado/batimento de asas) ---
+  // --- Morcego: guincho agudo com tremolo rápido + vibrato (chiado/batimento de asas) ---
+  if (batProxGain) return;            // já criado: evita empilhar osciladores a cada nível
   const bOsc  = audioCtx.createOscillator();
   const bFlt  = audioCtx.createBiquadFilter();
   const bAmp  = audioCtx.createGain();
   const bTrem = audioCtx.createOscillator();
   const bTremG= audioCtx.createGain();
+  const bVib  = audioCtx.createOscillator();   // vibrato leve → guincho soa mais orgânico
+  const bVibG = audioCtx.createGain();
   const bGain = audioCtx.createGain();
 
-  bOsc.type = 'sawtooth'; bOsc.frequency.setValueAtTime(2600, audioCtx.currentTime);
-  bFlt.type = 'bandpass'; bFlt.frequency.setValueAtTime(2800, audioCtx.currentTime); bFlt.Q.setValueAtTime(3, audioCtx.currentTime);
+  // Guincho menos estridente: frequência mais baixa, tremolo mais suave (item C25)
+  bOsc.type = 'triangle'; bOsc.frequency.setValueAtTime(1500, audioCtx.currentTime);
+  bVib.frequency.setValueAtTime(6, audioCtx.currentTime); bVibG.gain.setValueAtTime(80, audioCtx.currentTime);
+  bVib.connect(bVibG); bVibG.connect(bOsc.frequency);
+  bFlt.type = 'bandpass'; bFlt.frequency.setValueAtTime(1600, audioCtx.currentTime); bFlt.Q.setValueAtTime(2, audioCtx.currentTime);
   bAmp.gain.setValueAtTime(1, audioCtx.currentTime);
-  bTrem.type = 'sine'; bTrem.frequency.setValueAtTime(22, audioCtx.currentTime); // 22 cliques/s
-  bTremG.gain.setValueAtTime(0.9, audioCtx.currentTime);
+  bTrem.type = 'sine'; bTrem.frequency.setValueAtTime(14, audioCtx.currentTime); // batimento de asas mais lento
+  bTremG.gain.setValueAtTime(0.7, audioCtx.currentTime);
   bTrem.connect(bTremG); bTremG.connect(bAmp.gain); // amplitude modulation = efeito de clique
-  bGain.gain.setValueAtTime(0, audioCtx.currentTime);
+  bGain.gain.setValueAtTime(0, audioCtx.currentTime);   // começa em silêncio; só sobe por proximidade (item C29)
 
-  bOsc.connect(bFlt); bFlt.connect(bAmp); bAmp.connect(bGain); bGain.connect(audioCtx.destination);
-  bOsc.start(); bTrem.start();
+  bOsc.connect(bFlt); bFlt.connect(bAmp); bAmp.connect(bGain); bGain.connect(masterGain);
+  bOsc.start(); bTrem.start(); bVib.start();
   batProxGain = bGain;
 }
 
 function updateProximitySounds() {
-  if (!audioStarted || !ghostProxGain) return;
+  if (!audioStarted) return;
   let minGhost = Infinity, minBat = Infinity;
   const px = player.x + player.w / 2, py = player.y + player.h / 2;
 
@@ -690,36 +1116,67 @@ function updateProximitySounds() {
     const dx = px - (e.x + (e.w || 0) / 2);
     const dy = py - (e.y + (e.h || 0) / 2);
     const dist = Math.sqrt(dx * dx + dy * dy);
-    if (e instanceof Ghost) minGhost = Math.min(minGhost, dist);
-    else                    minBat   = Math.min(minBat,   dist);
+    if (e instanceof Ghost)    minGhost = Math.min(minGhost, dist);
+    else if (e instanceof Bat) minBat   = Math.min(minBat,   dist);
+    // Shade não emite som de proximidade (silenciosa por design)
   }
 
-  const gVol = minGhost < PROX_RANGE ? (1 - minGhost / PROX_RANGE) * 0.13 : 0;
-  const bVol = minBat   < PROX_RANGE ? (1 - minBat   / PROX_RANGE) * 0.09 : 0;
-  ghostProxGain.gain.setTargetAtTime(gVol, audioCtx.currentTime, 0.25);
-  batProxGain.gain.setTargetAtTime(bVol,   audioCtx.currentTime, 0.15);
+  const gVol = minGhost < PROX_RANGE ? (1 - minGhost / PROX_RANGE) * GHOST_MAX_VOL : 0;
+  const bVol = minBat   < PROX_RANGE ? (1 - minBat   / PROX_RANGE) * 0.06 : 0;
+  // O elemento Audio não tem ramps; suavizamos o volume manualmente para evitar "saltos".
+  if (ghostAudio) {
+    const v = ghostAudio.volume + (gVol - ghostAudio.volume) * 0.08;
+    ghostAudio.volume = Math.max(0, Math.min(1, v));
+  }
+  if (batProxGain) batProxGain.gain.setTargetAtTime(bVol, audioCtx.currentTime, 0.15);
 }
 
 function stopLoops() {
   const t = audioCtx.currentTime;
-  if (droneGain)    { droneGain.gain.gain.exponentialRampToValueAtTime(0.001, t + 1.2); droneGain = null; }
-  if (flameGain)    { flameGain.gain.gain.exponentialRampToValueAtTime(0.001, t + 1.2); flameGain = null; }
-  if (ghostProxGain){ ghostProxGain.gain.setTargetAtTime(0, t, 0.3); }
-  if (batProxGain)  { batProxGain.gain.setTargetAtTime(0, t, 0.3);   }
+  // Fade-out e PARADA REAL dos osciladores — antes eles só baixavam o volume e vazavam (itens C23/C28)
+  if (droneGain) {
+    const g = droneGain.gain.gain;
+    g.cancelScheduledValues(t); g.setValueAtTime(g.value, t);
+    g.linearRampToValueAtTime(0.0001, t + 1.0);
+    try { droneGain.osc.stop(t + 1.1); droneGain.osc2.stop(t + 1.1); droneGain.lfo.stop(t + 1.1); } catch (e) {}
+    droneGain = null;
+  }
+  if (flameGain) {
+    const g = flameGain.gain.gain;
+    g.cancelScheduledValues(t); g.setValueAtTime(g.value, t);
+    g.linearRampToValueAtTime(0.0001, t + 1.0);
+    try { flameGain.src.stop(t + 1.1); flameGain.fLfo.stop(t + 1.1); } catch (e) {}
+    flameGain = null;
+  }
+  if (ghostAudio)  { ghostAudio.volume = 0; ghostAudio.pause(); }
+  if (batProxGain) { batProxGain.gain.setTargetAtTime(0, t, 0.3); }
 }
 
 function playStep() {
   const now  = audioCtx.currentTime;
+  // Componente de ruído (atrito do pé com o chão de pedra)
   const src  = audioCtx.createBufferSource();
   src.buffer = createNoiseBuffer(0.15);
   const flt  = audioCtx.createBiquadFilter();
   flt.type   = 'lowpass';
   flt.frequency.setValueAtTime(260, now);
   const gain = audioCtx.createGain();
-  gain.gain.setValueAtTime(0.22, now);
+  gain.gain.setValueAtTime(0.18, now);
   gain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
-  src.connect(flt); flt.connect(gain); gain.connect(audioCtx.destination);
+  src.connect(flt); flt.connect(gain); gain.connect(masterGain);
   src.start(now); src.stop(now + 0.15);
+
+  // Baque grave curto (peso da pisada) — varia de tom para não soar repetitivo
+  const thump = audioCtx.createOscillator();
+  const tg    = audioCtx.createGain();
+  thump.type  = 'sine';
+  const base  = 95 + Math.random() * 20;
+  thump.frequency.setValueAtTime(base, now);
+  thump.frequency.exponentialRampToValueAtTime(base * 0.55, now + 0.09);
+  tg.gain.setValueAtTime(0.16, now);
+  tg.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+  thump.connect(tg); tg.connect(masterGain);
+  thump.start(now); thump.stop(now + 0.12);
 }
 
 function playKeyCollect() {
@@ -732,13 +1189,14 @@ function playKeyCollect() {
     gain.gain.setValueAtTime(0, now + i * 0.09);
     gain.gain.linearRampToValueAtTime(0.22, now + i * 0.09 + 0.02);
     gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.09 + 0.28);
-    osc.connect(gain); gain.connect(audioCtx.destination);
+    osc.connect(gain); gain.connect(masterGain);
     osc.start(now + i * 0.09); osc.stop(now + i * 0.09 + 0.32);
   });
 }
 
 function playHurt() {
   const now  = audioCtx.currentTime;
+  // Ruído filtrado descendente (dor/sibilo)
   const src  = audioCtx.createBufferSource();
   src.buffer = createNoiseBuffer(0.35);
   const flt  = audioCtx.createBiquadFilter();
@@ -746,10 +1204,21 @@ function playHurt() {
   flt.frequency.setValueAtTime(900, now);
   flt.frequency.exponentialRampToValueAtTime(160, now + 0.28);
   const gain = audioCtx.createGain();
-  gain.gain.setValueAtTime(0.45, now);
+  gain.gain.setValueAtTime(0.4, now);
   gain.gain.exponentialRampToValueAtTime(0.001, now + 0.32);
-  src.connect(flt); flt.connect(gain); gain.connect(audioCtx.destination);
+  src.connect(flt); flt.connect(gain); gain.connect(masterGain);
   src.start(now); src.stop(now + 0.38);
+
+  // Impacto grave (a pancada do golpe)
+  const osc = audioCtx.createOscillator();
+  const og  = audioCtx.createGain();
+  osc.type  = 'triangle';
+  osc.frequency.setValueAtTime(190, now);
+  osc.frequency.exponentialRampToValueAtTime(70, now + 0.18);
+  og.gain.setValueAtTime(0.3, now);
+  og.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
+  osc.connect(og); og.connect(masterGain);
+  osc.start(now); osc.stop(now + 0.24);
 }
 
 function playGameOver() {
@@ -762,7 +1231,7 @@ function playGameOver() {
     osc.frequency.exponentialRampToValueAtTime(freq * 0.65, now + 3.0);
     gain.gain.setValueAtTime(0.12, now);
     gain.gain.exponentialRampToValueAtTime(0.001, now + 3.0);
-    osc.connect(gain); gain.connect(audioCtx.destination);
+    osc.connect(gain); gain.connect(masterGain);
     osc.start(now); osc.stop(now + 3.2);
   });
 }
@@ -779,8 +1248,84 @@ function playWin() {
     gain.gain.setValueAtTime(0, now + t);
     gain.gain.linearRampToValueAtTime(0.18, now + t + 0.02);
     gain.gain.exponentialRampToValueAtTime(0.001, now + t + 0.38);
-    osc.connect(gain); gain.connect(audioCtx.destination);
+    osc.connect(gain); gain.connect(masterGain);
     osc.start(now + t); osc.stop(now + t + 0.42);
+  });
+}
+
+function playRelight() {
+  const now = audioCtx.currentTime;
+  // Chiado ascendente (faísca/ar)
+  const src = audioCtx.createBufferSource();
+  src.buffer = createNoiseBuffer(0.4);
+  const flt = audioCtx.createBiquadFilter();
+  flt.type = 'bandpass';
+  flt.frequency.setValueAtTime(500, now);
+  flt.frequency.exponentialRampToValueAtTime(1600, now + 0.25);
+  const gain = audioCtx.createGain();
+  gain.gain.setValueAtTime(0.0001, now);
+  gain.gain.linearRampToValueAtTime(0.3, now + 0.03);
+  gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+  src.connect(flt); flt.connect(gain); gain.connect(masterGain);
+  src.start(now); src.stop(now + 0.42);
+
+  // "Fwoom" grave de baforada de fogo pegando
+  const fwoom = audioCtx.createBufferSource();
+  fwoom.buffer = createNoiseBuffer(0.5);
+  const ff = audioCtx.createBiquadFilter();
+  ff.type = 'lowpass';
+  ff.frequency.setValueAtTime(700, now);
+  ff.frequency.exponentialRampToValueAtTime(120, now + 0.4);
+  const fg = audioCtx.createGain();
+  fg.gain.setValueAtTime(0.0001, now);
+  fg.gain.linearRampToValueAtTime(0.32, now + 0.05);
+  fg.gain.exponentialRampToValueAtTime(0.001, now + 0.45);
+  fwoom.connect(ff); ff.connect(fg); fg.connect(masterGain);
+  fwoom.start(now); fwoom.stop(now + 0.5);
+}
+
+function playWind() {
+  const now = audioCtx.currentTime;
+  const src = audioCtx.createBufferSource();
+  src.buffer = createNoiseBuffer(1.6);
+  const flt = audioCtx.createBiquadFilter();
+  flt.type = 'bandpass';
+  flt.frequency.setValueAtTime(700, now);
+  flt.frequency.linearRampToValueAtTime(300, now + 1.4);
+  flt.Q.setValueAtTime(0.6, now);
+  const gain = audioCtx.createGain();
+  gain.gain.setValueAtTime(0.0001, now);
+  gain.gain.linearRampToValueAtTime(0.32, now + 0.4);
+  gain.gain.linearRampToValueAtTime(0.0001, now + 1.5);
+  src.connect(flt); flt.connect(gain); gain.connect(masterGain);
+  src.start(now); src.stop(now + 1.6);
+}
+
+function playBossHit() {
+  const now = audioCtx.currentTime;
+  const osc  = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.type = 'square';
+  osc.frequency.setValueAtTime(220, now);
+  osc.frequency.exponentialRampToValueAtTime(90, now + 0.18);
+  gain.gain.setValueAtTime(0.1, now);
+  gain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+  osc.connect(gain); gain.connect(masterGain);
+  osc.start(now); osc.stop(now + 0.22);
+}
+
+function playBossDeath() {
+  const now = audioCtx.currentTime;
+  [220, 160, 110, 70].forEach((f, i) => {
+    const osc  = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(f, now + i * 0.12);
+    osc.frequency.exponentialRampToValueAtTime(f * 0.4, now + i * 0.12 + 0.9);
+    gain.gain.setValueAtTime(0.16, now + i * 0.12);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.12 + 1.0);
+    osc.connect(gain); gain.connect(masterGain);
+    osc.start(now + i * 0.12); osc.stop(now + i * 0.12 + 1.1);
   });
 }
 
@@ -802,42 +1347,37 @@ const lightCvs = document.createElement('canvas');
 lightCvs.width = SW; lightCvs.height = SH;
 const lctx = lightCvs.getContext('2d');
 
-function applyLight(ctx, tx, ty, radius) {
+function applyLight(ctx, lights) {
   // 1. Cobertura de escuridão
   lctx.globalCompositeOperation = 'source-over';
   lctx.fillStyle = 'rgba(0,0,0,0.93)';
   lctx.fillRect(0, 0, SW, SH);
 
-  // 2. Perfura a escuridão com gradiente radial (destination-out)
-  const hole = lctx.createRadialGradient(tx, ty, 0, tx, ty, radius);
-  hole.addColorStop(0,    'rgba(0,0,0,1)');
-  hole.addColorStop(0.25, 'rgba(0,0,0,0.96)');
-  hole.addColorStop(0.55, 'rgba(0,0,0,0.78)');
-  hole.addColorStop(0.80, 'rgba(0,0,0,0.38)');
-  hole.addColorStop(1.0,  'rgba(0,0,0,0)');
-
+  // 2. Perfura a escuridão para cada fonte de luz (destination-out)
   lctx.globalCompositeOperation = 'destination-out';
-  lctx.fillStyle = hole;
-  lctx.fillRect(0, 0, SW, SH);
+  for (const L of lights) {
+    const hole = lctx.createRadialGradient(L.x, L.y, 0, L.x, L.y, L.radius);
+    hole.addColorStop(0,    'rgba(0,0,0,1)');
+    hole.addColorStop(0.25, 'rgba(0,0,0,0.96)');
+    hole.addColorStop(0.55, 'rgba(0,0,0,0.78)');
+    hole.addColorStop(0.80, 'rgba(0,0,0,0.38)');
+    hole.addColorStop(1.0,  'rgba(0,0,0,0)');
+    lctx.fillStyle = hole;
+    lctx.fillRect(0, 0, SW, SH);
+  }
 
-  // 3. Tonalidade laranja quente (source-over sobre a máscara já furada)
+  // 3. Tonalidade laranja quente de cada fonte
   lctx.globalCompositeOperation = 'source-over';
-  const warm = lctx.createRadialGradient(tx, ty, 0, tx, ty, radius * 0.7);
-  warm.addColorStop(0,   'rgba(255,145,30,0.22)');
-  warm.addColorStop(0.5, 'rgba(255,95,10,0.12)');
-  warm.addColorStop(1,   'rgba(255,60,0,0)');
-  lctx.fillStyle = warm;
-  lctx.fillRect(0, 0, SW, SH);
+  for (const L of lights) {
+    const warm = lctx.createRadialGradient(L.x, L.y, 0, L.x, L.y, L.radius * 0.7);
+    warm.addColorStop(0,   'rgba(255,145,30,0.22)');
+    warm.addColorStop(0.5, 'rgba(255,95,10,0.12)');
+    warm.addColorStop(1,   'rgba(255,60,0,0)');
+    lctx.fillStyle = warm;
+    lctx.fillRect(0, 0, SW, SH);
+  }
 
-  // 4. Borda de chama pulsante (inner glow)
-  const pulse = lctx.createRadialGradient(tx, ty, 0, tx, ty, 55);
-  pulse.addColorStop(0,   'rgba(255,230,120,0.10)');
-  pulse.addColorStop(0.6, 'rgba(255,160,40,0.06)');
-  pulse.addColorStop(1,   'rgba(0,0,0,0)');
-  lctx.fillStyle = pulse;
-  lctx.fillRect(0, 0, SW, SH);
-
-  // 5. Aplica sobre o frame principal
+  // 4. Aplica sobre o frame principal
   ctx.drawImage(lightCvs, 0, 0);
 }
 
@@ -950,10 +1490,10 @@ function drawWallTorch(ctx, wx, wy, cx, cy, tick) {
   ctx.fill();
 }
 
-function drawExitDoor(ctx, cx, cy, keysGot) {
+function drawExitDoor(ctx, cx, cy, open) {
   const dx = EXIT.x - cx, dy = EXIT.y - cy;
   if (dx < -80 || dx > SW + 80) return;
-  const locked = keysGot < TOTAL_KEYS;
+  const locked = !open;
 
   // Moldura
   ctx.fillStyle = '#2e1840';
@@ -986,7 +1526,8 @@ function drawExitDoor(ctx, cx, cy, keysGot) {
     ctx.fillStyle = '#d4a820';
     ctx.font = 'bold 13px monospace';
     ctx.textAlign = 'center';
-    ctx.fillText(`${keysGot} / ${TOTAL_KEYS} chaves`, dx + 21, dy - 84);
+    ctx.fillText(isBossLevel ? 'Derrote a Sombra' : `${player.keys} / ${TOTAL_KEYS} chaves`,
+      dx + 21, dy - 84);
     ctx.textAlign = 'left';
   } else {
     // Brilho dourado
@@ -1018,34 +1559,90 @@ function drawHUD(ctx, player) {
     ctx.shadowBlur = 0;
   }
 
-  // Contador de chaves
-  ctx.fillStyle = '#ffd700';
-  ctx.font = 'bold 18px monospace';
-  ctx.textAlign = 'right';
-  ctx.fillText(`Chaves: ${player.keys} / ${TOTAL_KEYS}`, SW - 16, 32);
-  ctx.textAlign = 'left';
-
-  // Dica inicial
-  if (player.tick < 310 && currentLevelIndex === 0) {
-    ctx.globalAlpha = Math.min(1, (310 - player.tick) / 60);
-    ctx.fillStyle = 'rgba(190,155,220,0.85)';
-    ctx.font = '14px monospace';
-    ctx.textAlign = 'center';
-    ctx.fillText('A / D = mover   |   SPACE = pular   |   Colete as chaves e chegue à saída!',
-      SW / 2, SH - 22);
+  // Medidor de combustível da tocha (em TODAS as fases — a tocha sempre decai) (item 12)
+  {
+    const fuel = player.torchFuel;
+    const bw = 150, bh = 13, bx = SW - 16 - bw, by = 18;
+    const low = fuel < 0.3;
+    // Pisca quando crítica
+    if (!low || Math.floor(globalTick / 8) % 2 === 0) {
+      ctx.fillStyle = '#ffce38';
+      ctx.font = 'bold 14px monospace';
+      ctx.textAlign = 'right';
+      ctx.fillText('TOCHA', bx - 8, by + 11);
+    }
     ctx.textAlign = 'left';
+    // Trilho
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    ctx.fillRect(bx - 2, by - 2, bw + 4, bh + 4);
+    ctx.fillStyle = '#241208';
+    ctx.fillRect(bx, by, bw, bh);
+    // Preenchimento (laranja → vermelho conforme esvazia)
+    const r = 255, g = (60 + 150 * fuel) | 0;
+    ctx.fillStyle = `rgb(${r},${g},40)`;
+    ctx.shadowColor = 'rgba(255,140,30,0.7)'; ctx.shadowBlur = low ? 0 : 8;
+    ctx.fillRect(bx, by, bw * fuel, bh);
+    ctx.shadowBlur = 0;
+  }
+
+  // Contador de chaves (logo abaixo da tocha; oculto na fase do boss)
+  if (!isBossLevel) {
+    ctx.fillStyle = '#ffd700';
+    ctx.font = 'bold 18px monospace';
+    ctx.textAlign = 'right';
+    ctx.fillText(`Chaves: ${player.keys} / ${TOTAL_KEYS}`, SW - 16, 54);
+    ctx.textAlign = 'left';
+  }
+
+  // Indicador de mudo (item C30)
+  if (audioMuted) {
+    ctx.fillStyle = 'rgba(200,200,210,0.85)';
+    ctx.font = 'bold 13px monospace';
+    ctx.textAlign = 'right';
+    ctx.fillText('🔇 MUDO (M)', SW - 16, 74);
+    ctx.textAlign = 'left';
+  }
+
+  // Dica contextual: perto de fogueira apagada com a tocha fraca demais (item A6)
+  if (nearUnlitFire && state === 'playing') {
+    ctx.globalAlpha = 0.95;
+    ctx.fillStyle = '#ffce38';
+    ctx.shadowColor = '#000'; ctx.shadowBlur = 5;
+    ctx.font = 'bold 15px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('Sua tocha está fraca! Reacenda-a no fogo antes de acender a fogueira', SW / 2, SH - 44);
+    ctx.textAlign = 'left';
+    ctx.shadowBlur = 0;
     ctx.globalAlpha = 1;
   }
 
-  // Narrativa sombria
-  if (storyAlpha > 0 && currentStoryText) {
-    ctx.globalAlpha = Math.min(1, storyAlpha);
-    ctx.fillStyle = '#ffffff';
-    ctx.shadowColor = '#000000';
-    ctx.shadowBlur = 4;
-    ctx.font = '20px monospace';
+  // Texto de TUTORIAL (mecânica): rodapé, roxo, prefixado por ▸ (item B17)
+  if (currentTutorialText) {
+    ctx.globalAlpha = 0.9;
+    ctx.fillStyle = 'rgba(200,170,230,0.95)';
+    ctx.shadowColor = '#000'; ctx.shadowBlur = 4;
+    ctx.font = '15px monospace';
     ctx.textAlign = 'center';
-    ctx.fillText(currentStoryText, SW / 2, Math.max(80, SH / 4));
+    ctx.fillText('▸ ' + currentTutorialText, SW / 2, SH - 20);
+    ctx.textAlign = 'left';
+    ctx.shadowBlur = 0;
+    ctx.globalAlpha = 1;
+  }
+
+  // NARRATIVA (pensamento/memória): painel central, itálico, com tarja — distinto do tutorial (itens B17/B18)
+  if (storyAlpha > 0 && currentStoryText) {
+    const a = Math.min(1, storyAlpha);
+    const y = Math.max(96, SH / 4);
+    ctx.font = 'italic 19px monospace';
+    const tw = ctx.measureText(currentStoryText).width;
+    ctx.globalAlpha = a * 0.5;
+    ctx.fillStyle = '#000';
+    ctx.fillRect(SW / 2 - tw / 2 - 18, y - 22, tw + 36, 34);   // tarja de leitura
+    ctx.globalAlpha = a;
+    ctx.fillStyle = '#e8dcff';
+    ctx.shadowColor = '#000'; ctx.shadowBlur = 4;
+    ctx.textAlign = 'center';
+    ctx.fillText(currentStoryText, SW / 2, y);
     ctx.textAlign = 'left';
     ctx.shadowBlur = 0;
     ctx.globalAlpha = 1;
@@ -1053,14 +1650,49 @@ function drawHUD(ctx, player) {
 }
 
 // ── Estado do jogo ────────────────────────────────────────────────────────────
-let player, enemies, gameKeys, sparks;
+let player, enemies, gameKeys, gameHearts, sparks;
+let campfires = null, boss = null;
 let camX = 0, camY = 0;
-let state = 'playing';
+let state = 'intro';           // 'intro' | 'playing' | 'bossIntro' | 'dead' | 'won'
 let prevState = 'playing';
 let flicker = 0, flickT = 0;
 let jumpLast = false;
+// Dois contadores distintos (item 30):
+//  • globalTick — avança SÓ no estado 'playing'. Use para lógica de jogo (flicker, timers de som).
+//  • frameCount — avança em TODOS os estados. Use para animação de overlays (vento, fades, intro).
 let globalTick = 0;
 let stepTimer = 0;
+let frameCount = 0;
+
+// Boss / Fase 3
+let isBossLevel = false;
+let bossDefeated = false;
+let bossIntroT = 0;
+let windTimer = 0;
+let windFx = 0;
+
+// Fade, intro e mensagens
+let introT = 0;
+let introStarting = false;
+let fadeAlpha = 1, fadeTarget = 0;
+const FADE_SPEED = 0.025;
+let transition = null;         // função executada quando a tela fica totalmente preta
+let levelTitleT = 0;
+let banner = null;             // { text, t } – mensagem temporária
+
+function startTransition(fn) { fadeTarget = 1; transition = fn; }
+
+function updateFade() {
+  if (fadeAlpha < fadeTarget)      fadeAlpha = Math.min(fadeTarget, fadeAlpha + FADE_SPEED);
+  else if (fadeAlpha > fadeTarget) fadeAlpha = Math.max(fadeTarget, fadeAlpha - FADE_SPEED);
+  if (transition && fadeAlpha >= 0.999) {
+    const fn = transition; transition = null;
+    fn();
+    fadeTarget = 0;
+  }
+}
+
+function spawnWind() { windFx = 80; }
 
 function loadLevel(index) {
   currentLevelIndex = index;
@@ -1070,29 +1702,68 @@ function loadLevel(index) {
   PLATFORMS = lvl.PLATFORMS;
   KEY_DEFS = lvl.KEY_DEFS;
   TOTAL_KEYS = KEY_DEFS.length;
+  HEART_DEFS = lvl.HEART_DEFS || [];
   ENEMY_DEFS = lvl.ENEMY_DEFS;
   WALL_TORCHES = lvl.WALL_TORCHES;
   EXIT = lvl.EXIT;
   STORY_ZONES = lvl.STORY_ZONES ? JSON.parse(JSON.stringify(lvl.STORY_ZONES)) : [];
+  TUTORIAL_ZONES = lvl.TUTORIAL_ZONES ? JSON.parse(JSON.stringify(lvl.TUTORIAL_ZONES)) : [];
   currentStoryText = "";
+  currentTutorialText = "";
   storyAlpha = 0;
+
+  // Fase do boss
+  isBossLevel = !!lvl.isBoss;
+  bossDefeated = false;
+  campfires = lvl.CAMPFIRES ? lvl.CAMPFIRES.map(c => new Campfire(c.x, c.y, c.reward)) : null;
+  boss = lvl.BOSS ? new Boss(lvl.BOSS.x, lvl.BOSS.y) : null;
+
+  // Fade-in e título da fase
+  fadeAlpha = 1; fadeTarget = 0;
+  levelTitleT = 0;
+  banner = null;
+  windFx = 0;
 }
 
 function resetLevel() {
   loadLevel(currentLevelIndex);
   player   = new Player(50, 490);
-  enemies  = ENEMY_DEFS.map(d =>
-    d.type === 'ghost' ? new Ghost(d.x, d.y, d.patrol) : new Bat(d.x, d.y, d.patrol));
-  gameKeys = KEY_DEFS.map(k => new KeyItem(k.x, k.y));
+  enemies  = ENEMY_DEFS.map(d => {
+    if (d.type === 'ghost') return new Ghost(d.x, d.y, d.patrol);
+    if (d.type === 'shade') return new Shade(d.x, d.y, d.patrol);
+    return new Bat(d.x, d.y, d.patrol);
+  });
+  gameKeys   = KEY_DEFS.map(k => new KeyItem(k.x, k.y, k.memory));
+  gameHearts = HEART_DEFS.map(h => new Heart(h.x, h.y));
   sparks   = [];
   camX = 0; camY = 0;
-  state = 'playing';
-  prevState = 'playing';
   flicker = 0; flickT = 0;
   jumpLast = false;
   globalTick = 0;
   stepTimer = 0;
   if (audioStarted) { startDrone(); startFlame(); initProximityAudio(); }
+
+  if (isBossLevel) {
+    // Cena de entrada: o boss aparece, depois o vento apaga tudo
+    state = 'bossIntro';
+    bossIntroT = 0;
+    windTimer = (rng(420, 660)) | 0;
+    campfires.forEach(c => c.light());           // sala iluminada para a entrada
+    player.cpx = 150; player.cpy = 540;          // checkpoint seguro na arena, junto ao refúgio (item 16)
+    camX = clamp(boss.cx - SW / 2, 0, WORLD_W - SW);
+    camY = clamp(boss.cy - SH / 2, -80, WORLD_H - SH);
+    currentTutorialText = "";
+  } else {
+    state = 'playing';
+  }
+
+  // Ponte narrativa ao entrar numa fase nova (não em retry) (item B19)
+  if (pendingOpening) {
+    currentStoryText = pendingOpening;
+    storyAlpha = 3.6;
+    pendingOpening = null;
+  }
+  prevState = state;
 }
 
 function resetGame() {
@@ -1101,9 +1772,44 @@ function resetGame() {
 }
 
 // ── Loop de jogo ──────────────────────────────────────────────────────────────
+function updateIntro() {
+  introT++;
+}
+
+function updateBossIntro() {
+  bossIntroT++;
+  boss.t++;
+  for (const cf of campfires) cf.update();
+  for (const e of enemies) e.update(player);
+
+  // Câmera apresentando o boss
+  camX = lerp(camX, clamp(boss.cx - SW / 2, 0, WORLD_W - SW), 0.06);
+  camY = lerp(camY, clamp(boss.cy - SH / 2, -80, WORLD_H - SH), 0.06);
+
+  // O vento gélido varre a sala: apaga TODAS as fogueiras e quase apaga a tocha do herói (item 5).
+  // Deixa o herói com chama mínima — o bastante para correr ao refúgio e reacender o fogo.
+  if (bossIntroT === 110) {
+    player.torchFuel = 0.35;
+    for (const cf of campfires) cf.extinguish();
+    spawnWind();
+    if (audioStarted) playWind();
+  }
+
+  // Devolve o controle ao jogador
+  if (bossIntroT > 235) {
+    state = 'playing';
+    prevState = 'playing';
+    levelTitleT = 0;
+    currentTutorialText = "Como você fez lá atrás: ACENDA as fogueiras com a tocha e encurrale a Sombra na luz.";
+  }
+}
+
 function update() {
+  if (state === 'intro')     { updateIntro();     return; }
+  if (state === 'bossIntro') { updateBossIntro(); return; }
   if (state !== 'playing') return;
   globalTick++;
+  levelTitleT++;
 
   const goL  = input['ArrowLeft']  || input['KeyA'];
   const goR  = input['ArrowRight'] || input['KeyD'];
@@ -1125,8 +1831,12 @@ function update() {
   }
 
   for (const e of enemies) {
-    e.update();
-    if (e.alive && hits(player.rect, e.rect)) player.hurt();
+    e.update(player);   // Shade usa o player; Ghost/Bat ignoram o argumento
+    if (e.alive && hits(player.rect, e.rect)) {
+      const eCx = e.x + (e.w || 0) / 2;
+      const dir = (player.x + player.w / 2) < eCx ? -1 : 1;   // empurra no sentido oposto ao inimigo
+      player.hurt(dir);
+    }
   }
 
   // Som de dano: dispara quando frames de inv são ativados
@@ -1138,14 +1848,127 @@ function update() {
         k.collected = true;
         player.keys++;
         if (audioStarted) playKeyCollect();
+        // Cada chave desperta um fragmento de memória — o fio condutor da história (itens B10/B11)
+        if (k.memory) { currentStoryText = k.memory; storyAlpha = 3.4; }
       }
     }
   }
 
-  // Checa saída
-  if (player.keys >= TOTAL_KEYS && hits(player.rect, {x:EXIT.x, y:EXIT.y-65, w:42, h:68})) {
+  // Corações: recuperam 1 de vida, até o máximo de 3 (item 17)
+  for (const h of gameHearts) {
+    if (!h.collected && player.hp < 3 && hits(player.rect, h.rect)) {
+      h.collected = true;
+      player.hp++;
+      if (audioStarted) playKeyCollect();
+    }
+  }
+
+  // Checkpoint: memoriza a última posição em chão firme e longe de inimigos (itens 15/20)
+  if (player.onGround && player.vy >= 0) {
+    let safe = true;
+    for (const e of enemies) {
+      if (!e.alive) continue;
+      if (Math.abs((e.x + (e.w || 0) / 2) - (player.x + player.w / 2)) < 130 &&
+          Math.abs(e.y - player.y) < 110) { safe = false; break; }
+    }
+    if (safe) { player.cpx = clamp(player.x, 0, WORLD_W - player.w); player.cpy = player.y; }
+  }
+
+  // ── Tocha do herói (TODAS as fases): decai com o tempo e reacende no fogo (itens 8/9) ──
+  const ptx = player.x + player.w / 2 + player.facing * 16;
+  const pty = player.y + 18;
+  if (campfires) for (const cf of campfires) cf.update();
+
+  // Está perto de uma fonte de fogo acesa? (tochas de parede ou fogueiras acesas)
+  let nearFire = false;
+  for (const wt of WALL_TORCHES) {
+    if (Math.hypot(ptx - wt.x, pty - wt.y) < WALLTORCH_REFUEL_R) { nearFire = true; break; }
+  }
+  if (!nearFire && campfires) {
+    for (const cf of campfires) {
+      if (cf.lit && Math.hypot(ptx - cf.flameX, pty - cf.flameY) < FIRE_REFUEL_R) { nearFire = true; break; }
+    }
+  }
+  if (nearFire) {
+    const wasLow = player.torchFuel < 0.35;
+    player.torchFuel = Math.min(1, player.torchFuel + 0.035);     // reacende rápido (~0.5s)
+    if (wasLow && player.torchFuel >= 0.35 && audioStarted) playRelight();
+  } else if (!bossDefeated) {
+    player.torchFuel = Math.max(0, player.torchFuel - (isBossLevel ? TORCH_DRAIN : TORCH_DRAIN_NORMAL));
+  }
+
+  // ── Acender fogueiras apagadas (TODAS as fases): o verbo central, ensinado já na Fase 1 (itens A1/A3/A6) ──
+  nearUnlitFire = false;
+  if (campfires) {
+    for (const cf of campfires) {
+      if (cf.lit) continue;
+      if (Math.hypot(ptx - cf.flameX, pty - cf.flameY) < FIRE_REFUEL_R) {
+        if (player.torchFuel > 0.15) {
+          if (cf.light()) {
+            if (audioStarted) playRelight();
+            // Recompensa: acender certas fogueiras solta um coração (item A3)
+            if (cf.reward === 'heart' && !cf.rewardGiven) {
+              cf.rewardGiven = true;
+              gameHearts.push(new Heart(cf.x, cf.y - 50));
+              banner = { text: "A chama revela algo...", t: 130 };
+            }
+          }
+        } else {
+          nearUnlitFire = true;   // tocha fraca demais: mostra dica contextual (item A6)
+        }
+      }
+    }
+  }
+
+  // ── Vento & Boss (Fase 3) ──
+  if (isBossLevel) {
+    // Rajadas de vento gélido: apagam fogueiras ao acaso e quase apagam a tocha (itens 2/4)
+    if (!bossDefeated && --windTimer <= 0) {
+      spawnWind();
+      if (audioStarted) playWind();
+      let apagadas = 0;
+      for (const cf of campfires) {
+        if (cf.lit && Math.random() < 0.6) { cf.extinguish(); apagadas++; }
+      }
+      if (!nearFire) player.torchFuel = Math.min(player.torchFuel, 0.12);
+      banner = { text: apagadas > 0
+        ? "Um vento gélido apaga as fogueiras — reacenda-as!"
+        : "Um vento gélido varre a sala!", t: 150 };
+      windTimer = (rng(420, 720)) | 0;
+    }
+
+    if (boss) {
+      const wasAlive = boss.alive;
+      boss.update(player, campfires);
+      if (boss.alive) {
+        if (boss.inLight) {
+          if (audioStarted && globalTick % 12 === 0) playBossHit();
+          // Faíscas saltando do boss: feedback claro de que a luz o fere (item 18)
+          if (Math.random() < 0.6) sparks.push(new Spark(boss.cx, boss.cy));
+        }
+        if (hits(player.rect, boss.rect)) {
+          const dir = (player.x + player.w / 2) < boss.cx ? -1 : 1;
+          player.hurt(dir);
+        }
+      } else if (wasAlive) {
+        bossDefeated = true;
+        player.torchFuel = 1;        // a ameaça acabou: a tocha volta a arder plena
+        // Revelação no clímax: a Sombra era a própria escuridão do herói (itens B14/B15)
+        banner = { text: "A SOMBRA: \"Você venceu... a si mesmo.\"", t: 300 };
+        currentStoryText = "Eu me lembro agora. Eu era o guardião — e ela, o que neguei em mim.";
+        storyAlpha = 4.0;
+        currentTutorialText = "A porta se abriu — leve sua luz para fora deste pesadelo.";
+        if (audioStarted) { stopLoops(); playBossDeath(); }
+      }
+    }
+  }
+
+  // Checa saída (no boss, só abre após derrotá-lo)
+  const canExit = isBossLevel ? bossDefeated : (player.keys >= TOTAL_KEYS);
+  if (canExit && hits(player.rect, {x:EXIT.x, y:EXIT.y-65, w:42, h:68})) {
     if (currentLevelIndex < LEVELS.length - 1) {
       currentLevelIndex++;
+      pendingOpening = LEVELS[currentLevelIndex].opening || null;   // ponte narrativa entre atos (item B19)
       resetLevel();
       return;
     } else {
@@ -1153,6 +1976,14 @@ function update() {
     }
   }
   if (player.dead) state = 'dead';
+
+  // Tutorial: dicas posicionais
+  for (let i = 0; i < TUTORIAL_ZONES.length; i++) {
+    if (!TUTORIAL_ZONES[i].triggered && player.x > TUTORIAL_ZONES[i].triggerX) {
+      TUTORIAL_ZONES[i].triggered = true;
+      currentTutorialText = TUTORIAL_ZONES[i].text;
+    }
+  }
 
   // Narrativa sombria
   for (let i = 0; i < STORY_ZONES.length; i++) {
@@ -1199,6 +2030,8 @@ function update() {
 }
 
 function draw(ctx) {
+  if (state === 'intro') { drawIntro(ctx); drawFade(ctx); return; }
+
   drawBG(ctx, camX);
 
   for (const p of PLATFORMS) drawPlatform(ctx, p, camX, camY);
@@ -1206,32 +2039,49 @@ function draw(ctx) {
   // Tochas decorativas (antes da iluminação → afetadas pela escuridão)
   for (const wt of WALL_TORCHES) drawWallTorch(ctx, wt.x, wt.y, camX, camY, globalTick);
 
-  drawExitDoor(ctx, camX, camY, player.keys);
-  for (const k of gameKeys) k.draw(ctx, camX, camY);
-  for (const e of enemies)  e.draw(ctx, camX, camY);
+  // Fogueiras (Fase 3)
+  if (campfires) for (const cf of campfires) cf.draw(ctx, camX, camY);
+
+  drawExitDoor(ctx, camX, camY, isBossLevel ? bossDefeated : (player.keys >= TOTAL_KEYS));
+  for (const k of gameKeys)   k.draw(ctx, camX, camY);
+  for (const h of gameHearts) h.draw(ctx, camX, camY);
+  for (const e of enemies)    e.draw(ctx, camX, camY);
   for (const s of sparks)   s.draw(ctx, camX, camY);
 
+  if (boss) boss.draw(ctx, camX, camY);
   player.draw(ctx, camX, camY);
 
   // ── Iluminação ──────────────────────────────────────────────────────────────
   const tp = player.torchScreen(camX, camY);
-  applyLight(ctx, tp.x, tp.y, TORCH_R + flicker);
-
-  // ── Luzes extras das tochas decorativas ────────────────────────────────────
-  // Mini-aura de cada tocha de parede (source-over com alpha baixo)
-  lctx.globalCompositeOperation = 'source-over';
+  // O raio da tocha encolhe conforme o combustível baixa (fuel=1 → raio normal)
+  const torchR = TORCH_R * (0.28 + 0.72 * player.torchFuel) + flicker;
+  const lights = [{ x: tp.x, y: tp.y, radius: torchR }];
+  // Mini-aura de cada tocha de parede
   for (const wt of WALL_TORCHES) {
-    const wtsx = wt.x - camX, wtsy = wt.y - camY;
-    if (wtsx < -80 || wtsx > SW + 80) continue;
-    const mini = lctx.createRadialGradient(wtsx, wtsy - 8, 0, wtsx, wtsy - 8, 55);
-    mini.addColorStop(0,   'rgba(255,160,40,0.22)');
-    mini.addColorStop(0.5, 'rgba(255,100,10,0.08)');
-    mini.addColorStop(1,   'rgba(0,0,0,0)');
-    // Desenhamos no lightCvs antes do próximo frame (reutilizamos)
+    const wx = wt.x - camX, wy = wt.y - camY - 8;
+    if (wx < -120 || wx > SW + 120) continue;
+    lights.push({ x: wx, y: wy, radius: 110 });
   }
+  // Luz das fogueiras acesas
+  if (campfires) {
+    for (const cf of campfires) {
+      if (!cf.lit) continue;
+      const fx = cf.flameX - camX, fy = cf.flameY - camY;
+      if (fx < -200 || fx > SW + 200) continue;
+      lights.push({ x: fx, y: fy, radius: cf.radius + flicker });
+    }
+  }
+  applyLight(ctx, lights);
+
+  // Efeito de vento por cima da escuridão
+  drawWind(ctx);
 
   // HUD (acima de tudo)
   drawHUD(ctx, player);
+  if (isBossLevel && boss && (boss.alive || boss.dieT < 80)) drawBossBar(ctx, boss);
+  if (state === 'playing') drawLevelTitle(ctx);
+  if (state === 'bossIntro') drawBossIntroText(ctx);
+  drawBanner(ctx);
 
   // Overlay de estado
   if (state === 'dead' || state === 'won') {
@@ -1246,24 +2096,176 @@ function draw(ctx) {
       ctx.fillText('VOCÊ MORREU', SW / 2, SH / 2 - 18);
       ctx.fillStyle = '#aa5050';
       ctx.font = '30px monospace';
-      ctx.fillText('Pressione R para reiniciar', SW / 2, SH / 2 + 44);
+      ctx.fillText('Pressione R para refazer esta fase', SW / 2, SH / 2 + 44);
     } else {
       ctx.fillStyle = '#44e060';
       ctx.font = 'bold 68px monospace';
-      ctx.fillText('ESCAPOU!', SW / 2, SH / 2 - 18);
+      ctx.fillText('VOCÊ ESCAPOU!', SW / 2, SH / 2 - 48);
+      ctx.fillStyle = '#9fe0b0';
+      ctx.font = '22px monospace';
+      ctx.fillText('Você enfim recorda: foi você quem a selou, há eras.',
+        SW / 2, SH / 2);
+      ctx.fillStyle = '#7fb89a';
+      ctx.font = 'italic 19px monospace';
+      ctx.fillText('Ao aceitar sua própria sombra, a masmorra se desfaz em luz.',
+        SW / 2, SH / 2 + 30);
       ctx.fillStyle = '#70c880';
-      ctx.font = '30px monospace';
-      ctx.fillText('Pressione R para jogar novamente', SW / 2, SH / 2 + 44);
+      ctx.font = '26px monospace';
+      ctx.fillText('Pressione R para voltar ao início', SW / 2, SH / 2 + 72);
     }
     ctx.textAlign = 'left';
   }
+
+  drawFade(ctx);
+}
+
+// ── Overlays: intro, fade, vento, banners, título e barra do boss ─────────────
+function drawFade(ctx) {
+  if (fadeAlpha <= 0) return;
+  ctx.fillStyle = `rgba(0,0,0,${fadeAlpha})`;
+  ctx.fillRect(0, 0, SW, SH);
+}
+
+function drawIntro(ctx) {
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, SW, SH);
+
+  ctx.textAlign = 'center';
+
+  // Título
+  const titleA = clamp((introT - 10) / 50, 0, 1);
+  ctx.save();
+  ctx.globalAlpha = titleA;
+  ctx.fillStyle = '#b070e0';
+  ctx.shadowColor = '#6a2a9a'; ctx.shadowBlur = 26;
+  ctx.font = 'bold 52px monospace';
+  ctx.fillText('DUNGEON OF SHADOWS', SW / 2, 130);
+  ctx.restore();
+
+  // Linhas de história surgindo progressivamente
+  ctx.save();
+  ctx.font = '19px monospace';
+  for (let i = 0; i < INTRO_STORY.length; i++) {
+    const start = 75 + i * 55;
+    const a = clamp((introT - start) / 45, 0, 1);
+    if (a <= 0) continue;
+    ctx.globalAlpha = a * 0.92;
+    ctx.fillStyle = '#c9b8e0';
+    ctx.fillText(INTRO_STORY[i], SW / 2, 235 + i * 40);
+  }
+  ctx.restore();
+
+  // Prompt piscante
+  const allShown = introT > 75 + INTRO_STORY.length * 55 + 30;
+  if (allShown && Math.floor(introT / 30) % 2 === 0) {
+    ctx.fillStyle = '#ffd060';
+    ctx.font = 'bold 20px monospace';
+    ctx.fillText('Pressione ENTER para começar', SW / 2, SH - 55);
+  }
+  ctx.textAlign = 'left';
+}
+
+function drawWind(ctx) {
+  if (windFx <= 0) return;
+  const a = Math.min(1, windFx / 80) * 0.5;
+  ctx.save();
+  ctx.strokeStyle = `rgba(205,215,255,${a})`;
+  ctx.lineWidth = 2;
+  for (let i = 0; i < 18; i++) {
+    const y = (i * 37 + (frameCount * 4) % 37) % SH;
+    const x = SW + 120 - (frameCount * 16 + i * 90) % (SW + 260);
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(x - 70 - (i % 3) * 18, y + 7);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawBanner(ctx) {
+  if (!banner) return;
+  const a = clamp(banner.t / 40, 0, 1);
+  ctx.save();
+  ctx.globalAlpha = a;
+  ctx.fillStyle = '#ffe9c0';
+  ctx.shadowColor = '#000'; ctx.shadowBlur = 8;
+  ctx.font = 'bold 24px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText(banner.text, SW / 2, 70);
+  ctx.restore();
+  ctx.textAlign = 'left';
+}
+
+function drawBossIntroText(ctx) {
+  // A Sombra fala — e revela quem é o herói (itens B14/B15)
+  let txt;
+  if (bossIntroT < 110)      txt = "A SOMBRA: \"Enfim acordou, guardião...\"";
+  else if (bossIntroT < 175) txt = "A SOMBRA: \"Você me selou aqui — e a si mesmo.\"";
+  else                       txt = "A SOMBRA: \"Tente me apagar. Apague-se junto.\"";
+  ctx.save();
+  ctx.globalAlpha = 0.95;
+  ctx.fillStyle = '#ffe9c0';
+  ctx.shadowColor = '#000'; ctx.shadowBlur = 10;
+  ctx.font = 'bold 27px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText(txt, SW / 2, 88);
+  ctx.restore();
+  ctx.textAlign = 'left';
+}
+
+function drawLevelTitle(ctx) {
+  const name = LEVELS[currentLevelIndex].name;
+  if (!name || levelTitleT >= 180) return;
+  let a = 1;
+  if (levelTitleT < 30)       a = levelTitleT / 30;
+  else if (levelTitleT > 140) a = (180 - levelTitleT) / 40;
+  ctx.save();
+  ctx.globalAlpha = clamp(a, 0, 1);
+  ctx.fillStyle = '#c8a0f0';
+  ctx.shadowColor = '#5a2a8a'; ctx.shadowBlur = 16;
+  ctx.font = 'bold 30px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText(name, SW / 2, 64);
+  ctx.restore();
+  ctx.textAlign = 'left';
+}
+
+function drawBossBar(ctx, boss) {
+  const bw = 460, bh = 16, bx = (SW - bw) / 2, by = 24;
+  ctx.fillStyle = 'rgba(20,8,30,0.8)';
+  ctx.fillRect(bx - 3, by - 3, bw + 6, bh + 6);
+  ctx.fillStyle = '#2a0d18';
+  ctx.fillRect(bx, by, bw, bh);
+  const f = clamp(boss.hp / boss.maxHp, 0, 1);
+  const grd = ctx.createLinearGradient(bx, 0, bx + bw, 0);
+  grd.addColorStop(0, '#8a0030'); grd.addColorStop(1, '#ff2a55');
+  ctx.fillStyle = grd;
+  ctx.fillRect(bx, by, bw * f, bh);
+  ctx.strokeStyle = '#5a1a2a'; ctx.lineWidth = 2;
+  ctx.strokeRect(bx, by, bw, bh);
+  ctx.fillStyle = '#e0a0b0'; ctx.font = 'bold 13px monospace'; ctx.textAlign = 'center';
+  ctx.fillText('A SOMBRA', SW / 2, by + bh + 15);
+  ctx.textAlign = 'left';
 }
 
 // ── Bootstrap ─────────────────────────────────────────────────────────────────
 window.addEventListener('keydown', e => {
-  if (e.code === 'KeyR' && state !== 'playing') {
-    if (state === 'dead') resetLevel();
-    else resetGame();
+  // Mudo / liga som (item C30) — funciona em qualquer estado
+  if (e.code === 'KeyM') { setMuted(!audioMuted); return; }
+  // Começar o jogo a partir da história introdutória
+  if (state === 'intro' && !introStarting &&
+      (e.code === 'Enter' || e.code === 'NumpadEnter' || e.code === 'Space')) {
+    introStarting = true;
+    startTransition(() => { introStarting = false; resetGame(); });
+    return;
+  }
+  // Reiniciar após morrer / vencer
+  if (e.code === 'KeyR' && (state === 'dead' || state === 'won')) {
+    if (state === 'dead') {
+      startTransition(() => resetLevel());
+    } else {
+      startTransition(() => { state = 'intro'; introT = 0; });
+    }
   }
 });
 
@@ -1281,9 +2283,16 @@ function fitCanvas() {
 fitCanvas();
 window.addEventListener('resize', fitCanvas);
 
-resetGame();
+// Inicia na história introdutória (tela preta + fade-in)
+state = 'intro';
+introT = 0;
+fadeAlpha = 1; fadeTarget = 0;
 
 (function loop() {
+  frameCount++;
+  updateFade();
+  if (banner) { if (--banner.t <= 0) banner = null; }
+  if (windFx > 0) windFx--;
   update();
   draw(ctx);
   requestAnimationFrame(loop);

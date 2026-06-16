@@ -1,6 +1,6 @@
 # 🕯️ Dungeon of Shadows
 
-> Um jogo de plataforma 2D com tema de terror ambientado em masmorras sombrias. O jogador explora um dungeon escuro carregando uma tocha, coletando chaves e fugindo de criaturas sobrenaturais.
+> Um jogo de plataforma 2D com tema de terror ambientado em masmorras sombrias. O jogador explora dungeons escuros carregando uma tocha, coletando chaves, fugindo de criaturas sobrenaturais e, ao final, enfrentando um chefe que teme a luz.
 
 ---
 
@@ -10,7 +10,11 @@
 
 O destaque técnico do projeto é o **sistema de iluminação dinâmica por tocha**: uma máscara de escuridão é aplicada sobre o frame via `globalCompositeOperation: 'destination-out'`, perfurando a camada escura com um `radialGradient` suavíssimo e acelerado por GPU. O resultado é uma penumbra real com borda suave, tonalidade laranja-quente próxima à chama e flicker aleatório — exatamente o efeito presente em jogos como *Don't Starve* e *Hollow Knight*.
 
-O objetivo é atravessar um dungeon de **4.200 pixels de largura**, coletar as **4 chaves** espalhadas por plataformas perigosas e chegar à **porta de saída** sem ser derrotado.
+O jogo é dividido em **3 fases** com progressão de dificuldade pensada como um arco:
+
+1. **Fase 1 — Despertar nas Sombras:** tutorial. Ensina mover, pular, coletar chaves, desviar de inimigos, recuperar vida em corações e **manter a tocha acesa** nas tochas de parede.
+2. **Fase 2 — Caminho Sem Volta:** consolidação. Reúne as mecânicas e introduz as **mini-sombras**, que recuam e definham na luz da tocha — antecipando a arma do confronto final.
+3. **Fase 3 — A Sombra Final:** o chefe. Ao entrar, um vento gélido apaga todas as fogueiras da arena; o jogador precisa **reacendê-las com a tocha** e **encurralar a Sombra na luz** para derrotá-la.
 
 ---
 
@@ -24,17 +28,20 @@ O objetivo é atravessar um dungeon de **4.200 pixels de largura**, coletar as *
 
 ### Objetivo
 
-1. Explore o dungeon iluminando o caminho com sua tocha
-2. Colete as **4 chaves douradas** espalhadas pelo mapa
-3. Chegue à **porta de saída** no fim do nível
-4. Sobreviva com **3 vidas** — fantasmas e morcegos drenam uma vida ao toque
+1. Explore cada dungeon iluminando o caminho com sua tocha — que **enfraquece com o tempo** e é reacesa no fogo
+2. Colete as **chaves douradas** de cada fase para destrancar a porta
+3. Recupere vida nos **corações** espalhados pelo mapa (máximo de 3)
+4. Sobreviva com **3 vidas** — inimigos drenam uma vida ao toque e empurram o herói (sem perder o progresso da fase)
+5. Na fase final, **reacenda as fogueiras** e **encurrale a Sombra na luz**
 
 ### Inimigos
 
-| Inimigo      | Comportamento                                              |
-|--------------|------------------------------------------------------------|
-| **Fantasma** | Patrulha plataformas com movimento flutuante senoidal; glow de shader e gotas de sangue |
-| **Morcego**  | Voa em trajetória elíptica; asas animadas com flap, olhos vermelhos |
+| Inimigo        | Comportamento                                              |
+|----------------|------------------------------------------------------------|
+| **Fantasma**   | Patrulha plataformas com movimento flutuante senoidal; glow de shader e gotas de sangue |
+| **Morcego**    | Voa em trajetória elíptica; asas animadas com flap, olhos vermelhos |
+| **Mini-sombra**| Persegue na escuridão, mas **recua e definha na luz da tocha** — ensina a usar a luz como arma |
+| **A Sombra** (chefe) | Persegue no escuro e investe; **foge e sofre dano na luz** das fogueiras e da tocha. Mais ousada quanto mais fraca estiver sua chama |
 
 ---
 
@@ -58,9 +65,12 @@ O objetivo é atravessar um dungeon de **4.200 pixels de largura**, coletar as *
 ## 🗂️ Estrutura do Projeto
 
 ```
-TesteJogo/
-├── index.html    # Jogo completo (HTML + CSS + JS em arquivo único)
-└── README.md     # Este arquivo
+DungeonofShadows/
+├── index.html              # Jogo completo (HTML + CSS + JS em arquivo único)
+├── assets/
+│   └── sounds/
+│       └── ghost.mp3       # Som do fantasma (CC BY 3.0 — ver Créditos de Áudio)
+└── README.md               # Este arquivo
 ```
 
 ---
@@ -114,11 +124,15 @@ index.html
     │
     ├── Input                 keydown/keyup → objeto { code: bool }
     │
-    ├── class Player          Física AABB, colisão, animação, tocha com bezier
+    ├── class Player          Física AABB, colisão, animação, tocha, knockback, checkpoint
     ├── class Ghost           Patrulha senoidal, glow via shadowBlur, gotas de sangue
     ├── class Bat             Trajetória elíptica, asas animadas, olhos vermelhos
+    ├── class Shade           Mini-sombra: persegue no escuro, recua/definha na luz
     ├── class KeyItem         Hover senoidal, brilho dourado
+    ├── class Heart           Coletável de vida com pulso e brilho vermelho
     ├── class Spark           Partícula de faísca com física e fade
+    ├── class Campfire        Fogueira acendível/apagável (arena do chefe)
+    ├── class Boss            A Sombra: foge e sofre dano na luz; investidas no escuro
     │
     ├── applyLight()          Sistema de iluminação: destination-out + radialGradient
     │
@@ -138,29 +152,37 @@ index.html
 
 ## 📐 Design do Nível
 
-| Elemento          | Quantidade | Detalhe                                  |
-|-------------------|------------|------------------------------------------|
-| Plataformas       | 24         | Alturas variadas, incluindo pilares/paredes |
-| Chaves            | 4          | Requerem platforming preciso             |
-| Fantasmas         | 6          | Distribuídos ao longo de todo o percurso |
-| Morcegos          | 4          | Zonas superiores do mapa                 |
-| Tochas decorativas| 9          | Distribuídas pelo cenário com mini-luz   |
-| Largura do mapa   | 4.200 px   | Câmera com scroll horizontal             |
+| Elemento          | Detalhe                                              |
+|-------------------|------------------------------------------------------|
+| Fases             | 3 (duas de plataforma + arena do chefe)              |
+| Chaves            | 4 por fase de plataforma — destrancam a porta        |
+| Corações          | Recuperam 1 de vida (máx. 3)                          |
+| Inimigos          | Fantasmas, morcegos, mini-sombras e o chefe          |
+| Mecânica de luz   | Tocha que decai, tochas de parede e fogueiras acendíveis |
+| Largura dos mapas | 4.200 px (fases 1–2) / 1.800 px (arena do chefe)     |
 
 ---
 
 ## 🧩 Possíveis Extensões
 
-- Adicionar áudio com **Web Audio API** (passos, música ambiente, grunhidos dos inimigos)
-- Criar múltiplas fases com temas (cemitério, castelo, floresta amaldiçoada)
-- Sistema de save via `localStorage`
+- Sistema de save/checkpoint persistente via `localStorage`
 - Editor de nível via JSON/arquivo de configuração externo
 - Efeito de névoa animada com superfícies alpha sobrepostas
-- Chefe final com padrões de ataque
+- Novos padrões de ataque para o chefe (projéteis de sombra, invocações)
+- Temas adicionais de fase (cemitério, castelo, floresta amaldiçoada)
 - WebGL via **PixiJS** para shaders de luz ainda mais avançados
+
+---
+
+## 🔊 Créditos de Áudio
+
+A maior parte do áudio é gerada proceduralmente em tempo real via **Web Audio API** (drone ambiente, passos, dano, coleta de chave, vento, sons do boss etc.). O único arquivo de áudio externo é o som do fantasma:
+
+- **`assets/sounds/ghost.mp3`** — "ghostly voices" por **ERH** ([freesound.org/people/ERH/sounds/36757](https://freesound.org/people/ERH/sounds/36757)), via [Wikimedia Commons](https://commons.wikimedia.org/wiki/File:ERH_-_ghostly_voices_(cc-by)_(freesound).mp3). Licença **[CC BY 3.0](https://creativecommons.org/licenses/by/3.0/)**.
 
 ---
 
 ## 📄 Licença
 
-Este projeto está sob a licença **MIT**. Consulte o arquivo `LICENSE` para mais detalhes.
+O código deste projeto está sob a licença **MIT**. Consulte o arquivo `LICENSE` para mais detalhes.
+O áudio de terceiros mantém suas próprias licenças (veja **Créditos de Áudio** acima).
