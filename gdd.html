@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>GDD — Dungeon of Shadows (Versão Final)</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700;900&family=Inter:wght@300;400;500;600;700&display=swap');
+  *,*::before,*::after{margin:0;padding:0;box-sizing:border-box;}
+  :root{
+    --black:#05020f;--dark:#0b0518;--panel:#120a22;--purple:#1c0e2e;--mid:#3a2058;
+    --light:#7a4fa0;--gold:#ffd700;--amber:#ff8c00;--ember:#ff7f27;
+    --white:#e8e0f0;--ghost:#a0d3e8;--green:#44cc44;--red:#cc2222;
+    --muted:rgba(232,224,240,.66);--line:rgba(255,215,0,.14);
+  }
+  html{scroll-behavior:smooth;}
+  body{background:var(--black);color:var(--white);font-family:'Inter',sans-serif;line-height:1.7;font-size:15px;
+    background-image:
+      radial-gradient(circle,rgba(255,180,30,.05) 1px,transparent 1px),
+      radial-gradient(circle,rgba(160,80,255,.035) 1px,transparent 1px);
+    background-size:60px 60px,37px 37px;background-position:0 0,18px 18px;background-attachment:fixed;}
+
+  /* ── Top bar ── */
+  .topbar{position:sticky;top:0;z-index:40;background:rgba(5,2,15,.82);backdrop-filter:blur(10px);
+    border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;padding:11px 22px;}
+  .topbar .t{font-family:'Cinzel',serif;font-weight:700;color:var(--gold);font-size:.96rem;letter-spacing:.03em;}
+  .topbar .t small{font-weight:400;color:var(--muted);font-family:'Inter';font-size:.72rem;margin-left:8px;}
+  .topbar nav{display:flex;gap:3px;flex-wrap:wrap;}
+  .topbar nav a{color:var(--muted);text-decoration:none;font-size:.76rem;padding:5px 10px;border-radius:7px;transition:.15s;}
+  .topbar nav a:hover{background:rgba(255,215,0,.1);color:var(--gold);}
+  @media(max-width:900px){.topbar nav{display:none;}}
+
+  .doc{max-width:880px;margin:0 auto;padding:48px 30px 100px;}
+
+  /* ── Capa ── */
+  .cover{position:relative;overflow:hidden;border-radius:18px;margin-bottom:40px;padding:48px 44px;
+    background:
+      radial-gradient(ellipse at 80% 30%,rgba(255,127,39,.18),transparent 55%),
+      linear-gradient(135deg,#160a2b,#1c0e2e 55%,#0b0518);
+    border:1px solid var(--line);}
+  .cover::after{content:'🕯';position:absolute;right:34px;top:50%;transform:translateY(-50%);font-size:7rem;opacity:.22;
+    filter:drop-shadow(0 0 30px rgba(255,140,0,.5));}
+  .cover::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,transparent,var(--gold),transparent);opacity:.6;}
+  .cover .kicker{letter-spacing:.22em;text-transform:uppercase;font-size:.72rem;color:var(--amber);font-weight:600;margin-bottom:10px;}
+  .cover h1{font-family:'Cinzel',serif;font-weight:900;font-size:2.9rem;line-height:1.08;margin-bottom:8px;color:var(--gold);
+    text-shadow:0 0 40px rgba(255,215,0,.3);}
+  .cover .sub{font-size:1.05rem;color:var(--ghost);font-style:italic;margin-bottom:22px;}
+  .cover .meta{font-size:.86rem;color:var(--muted);line-height:1.85;border-top:1px solid rgba(255,215,0,.18);padding-top:16px;max-width:580px;}
+  .cover .meta b{color:var(--gold);font-weight:600;}
+
+  /* ── Seções ── */
+  section{position:relative;background:rgba(255,255,255,.028);border:1px solid var(--line);border-radius:14px;
+    padding:30px 32px;margin-bottom:22px;scroll-margin-top:70px;}
+  section::before{content:'';position:absolute;top:0;left:24px;right:24px;height:2px;
+    background:linear-gradient(90deg,transparent,rgba(255,215,0,.35),transparent);}
+  .hsec{font-family:'Cinzel',serif;font-weight:700;color:var(--gold);font-size:1.5rem;border-left:5px solid var(--amber);
+    padding-left:14px;margin-bottom:6px;}
+  .hsec .num{color:var(--amber);}
+  .sublead{color:var(--muted);font-size:.9rem;margin-bottom:20px;padding-left:19px;}
+  h3{color:var(--amber);font-size:1.04rem;margin:24px 0 10px;font-weight:600;letter-spacing:.02em;}
+  h3:first-of-type{margin-top:8px;}
+  h4{color:var(--ghost);font-size:.92rem;margin:16px 0 7px;font-weight:600;}
+  p{margin-bottom:11px;color:rgba(232,224,240,.86);}
+  .muted{color:var(--muted);}
+  code{background:rgba(255,255,255,.08);color:var(--ghost);padding:1px 6px;border-radius:4px;font-size:.85em;font-family:'SFMono-Regular',Consolas,monospace;}
+  strong{color:var(--white);}
+
+  table{width:100%;border-collapse:collapse;margin:10px 0 6px;font-size:.85rem;}
+  th{background:rgba(255,215,0,.12);color:var(--gold);text-align:left;padding:9px 12px;font-weight:600;font-size:.8rem;
+    border-bottom:1px solid rgba(255,215,0,.25);}
+  th:first-child{border-top-left-radius:8px;}th:last-child{border-top-right-radius:8px;}
+  td{padding:9px 12px;border-bottom:1px solid rgba(255,255,255,.06);vertical-align:top;color:rgba(232,224,240,.84);}
+  tr:nth-child(even) td{background:rgba(255,255,255,.02);}
+  tr:last-child td{border-bottom:none;}
+  tr:hover td{background:rgba(255,215,0,.04);}
+
+  ul.clean,ul.bul{margin:6px 0 12px;padding-left:0;list-style:none;}
+  ul.clean li,ul.bul li{position:relative;padding-left:20px;margin-bottom:6px;color:rgba(232,224,240,.86);}
+  ul.clean li::before{content:'▸';position:absolute;left:0;color:var(--amber);font-weight:700;}
+  ul.bul li::before{content:'•';position:absolute;left:4px;color:var(--light);font-weight:700;}
+
+  .fig{margin:18px 0;text-align:center;}
+  .fig img{max-width:100%;border:1px solid rgba(255,215,0,.2);border-radius:10px;background:#fff;padding:10px;
+    box-shadow:0 8px 30px rgba(0,0,0,.4);}
+  .fig figcaption{font-size:.78rem;color:var(--muted);margin-top:9px;font-style:italic;}
+
+  .quote{border-left:4px solid var(--gold);background:rgba(255,215,0,.05);padding:14px 18px;border-radius:0 10px 10px 0;
+    font-style:italic;color:rgba(232,224,240,.85);margin:12px 0;}
+
+  .cards{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:12px 0;}
+  @media(max-width:640px){.cards{grid-template-columns:1fr;}}
+  .mini{background:rgba(255,255,255,.04);border:1px solid var(--line);border-radius:10px;padding:14px 16px;}
+  .mini h4{margin-top:0;}
+  .mini p{font-size:.85rem;margin-bottom:0;color:var(--muted);}
+
+  .swatch{display:flex;align-items:center;gap:10px;margin-bottom:7px;font-size:.85rem;color:rgba(232,224,240,.84);}
+  .sw{width:22px;height:22px;border-radius:5px;border:1px solid rgba(255,255,255,.18);flex-shrink:0;}
+
+  .callout{border-radius:11px;padding:14px 18px;margin-bottom:10px;border-left:4px solid;}
+  .c-tut{background:rgba(255,215,0,.06);border-color:var(--gold);}
+  .c-flow{background:rgba(122,79,160,.12);border-color:var(--light);}
+  .c-pos{background:rgba(68,204,68,.07);border-color:var(--green);}
+  .callout b{display:block;margin-bottom:3px;color:var(--white);}
+  .callout span{font-size:.86rem;color:var(--muted);}
+
+  .tag{display:inline-block;background:rgba(122,79,160,.25);border:1px solid rgba(122,79,160,.4);color:var(--ghost);
+    border-radius:20px;padding:3px 11px;font-size:.76rem;margin:3px 4px 3px 0;}
+
+  .prog{margin-bottom:10px;}
+  .prog .pl{display:flex;justify-content:space-between;font-size:.83rem;color:var(--muted);margin-bottom:3px;}
+  .prog .pt{height:8px;background:rgba(255,255,255,.08);border-radius:5px;overflow:hidden;}
+  .prog .pf{height:100%;background:linear-gradient(90deg,var(--amber),var(--gold));border-radius:5px;}
+
+  .badge{display:inline-block;background:rgba(68,204,68,.1);color:var(--green);border:1px solid rgba(68,204,68,.35);
+    border-radius:20px;font-size:.72rem;padding:2px 10px;margin-left:8px;vertical-align:middle;}
+
+  .totop{position:fixed;right:20px;bottom:20px;background:linear-gradient(135deg,var(--amber),var(--gold));color:#1a0e02;
+    text-decoration:none;width:42px;height:42px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+    font-size:1.1rem;font-weight:700;box-shadow:0 6px 20px rgba(255,140,0,.4);z-index:45;}
+  @media print{.topbar,.totop{display:none;}body{background:#fff;color:#111;}section{break-inside:avoid;}}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <span class="t">🕯 GDD <small>Dungeon of Shadows · Versão Final</small></span>
+  <nav>
+    <a href="#visao">Visão</a>
+    <a href="#mecanicas">1. Mecânicas</a>
+    <a href="#narrativa">2. Narrativa</a>
+    <a href="#estetica">3. Estética</a>
+    <a href="#level">4. Level Design</a>
+    <a href="#tecnologia">5. Tecnologia</a>
+    <a href="#referencias">6. Referências</a>
+    <a href="#futuro">Futuro</a>
+  </nav>
+</div>
+
+<div class="doc">
+
+  <!-- CAPA -->
+  <div class="cover">
+    <div class="kicker">Game Design Document · Versão Final</div>
+    <h1>Dungeon of Shadows</h1>
+    <div class="sub">"Sua única arma é a luz."</div>
+    <div class="meta">
+      <b>Instituição:</b> Centro Universitário SATC — Desenvolvimento de Jogos<br/>
+      <b>Professor:</b> Me. Fabiano Naspolini de Oliveira<br/>
+      <b>Equipe:</b> Bruno Supriano · Gustavo Olivo Cittadin · Jean Lucas Preis · Jean Vitor Vieira<br/>
+      <b>Turma / Curso:</b> Engenharia de Software — [preencher dia da turma]
+    </div>
+  </div>
+
+  <!-- VISÃO GERAL -->
+  <section id="visao">
+    <div class="hsec">Visão Geral do Projeto</div>
+    <div class="sublead">Fundações conceituais e parâmetros de escopo do jogo. <span class="badge">3 fases · chefe · áudio procedural</span></div>
+    <table>
+      <tr><th style="width:30%">Campo</th><th>Especificação</th></tr>
+      <tr><td>Título</td><td>Dungeon of Shadows</td></tr>
+      <tr><td>Gênero principal</td><td>Plataforma 2D de terror atmosférico — ação, sobrevivência e exploração labiríntica</td></tr>
+      <tr><td>Plataforma-alvo</td><td>Navegadores desktop modernos (HTML5 Canvas) — sem instalação</td></tr>
+      <tr><td>Público-alvo</td><td>16–30 anos · fãs de mecânicas retrô, desafios rigorosos e narrativas sombrias</td></tr>
+      <tr><td>Modo de jogo</td><td>Single player</td></tr>
+      <tr><td>Objetivo macro</td><td>Navegar pela masmorra, coletar chaves, restaurar memórias, gerenciar a tocha e banir a Entidade Sombria usando a luz</td></tr>
+      <tr><td>Tecnologias core</td><td>HTML5 · CSS3 · JavaScript ES6 · Canvas 2D API · Web Audio API · zero frameworks / zero assets visuais</td></tr>
+      <tr><td>Escopo entregue</td><td>3 fases jogáveis · HUD dinâmico · 3 classes de inimigos + chefe com IA dedicada · checkpoints · narrativa ambiental</td></tr>
+    </table>
+  </section>
+
+  <!-- 1. MECÂNICAS -->
+  <section id="mecanicas">
+    <div class="hsec"><span class="num">1.</span> Mecânicas e Sistemas do Jogo</div>
+    <div class="sublead">Como o jogo funciona — regras, comandos, interface, itens, inimigos, obstáculos e persistência.</div>
+
+    <h3>1.1 Sistema de Regras</h3>
+    <p>O jogo opera sob regras determinísticas. O jogador controla um avatar em um labirinto bidimensional com colisão por blocos. O recurso limitador e motor de tensão é a <strong>chama da tocha</strong>, que decai continuamente e reduz o campo de visão.</p>
+    <table>
+      <tr><th style="width:32%">Regra</th><th>Definição</th></tr>
+      <tr><td>Inicialização</td><td>Menu de boas-vindas → texto introdutório → Fase 1</td></tr>
+      <tr><td>Vida</td><td>3 corações; dano reduz 1 coração</td></tr>
+      <tr><td>Dano</td><td>Contato com inimigos ou queda em abismo → perda de 1 coração</td></tr>
+      <tr><td>Invulnerabilidade</td><td>1200 ms (72 frames) após dano, com pisca-pisca</td></tr>
+      <tr><td>Vitória (Fases 1 e 2)</td><td>Coletar todas as chaves para abrir a porta</td></tr>
+      <tr><td>Vitória (Fase 3)</td><td>Zerar o HP do chefe</td></tr>
+      <tr><td>Derrota</td><td>HP zerado → tela de Game Over</td></tr>
+      <tr><td>Checkpoint</td><td>Queda em abismo reposiciona o jogador no último ponto seguro (<code>safeX</code>/<code>safeY</code>)</td></tr>
+      <tr><td>Decaimento da tocha</td><td>O raio luminoso diminui com o tempo; no mínimo (~40px) o jogador fica vulnerável</td></tr>
+      <tr><td>Fim do jogo</td><td>Pré-definido (3 fases) — não é infinito</td></tr>
+    </table>
+    <figure class="fig">
+      <img src="img/fluxograma_regras.jpeg" alt="Fluxograma das regras e do fluxo do jogo"/>
+      <figcaption>Fluxograma do jogo: início → fases → coleta de chaves → portas → arena do chefe → vitória.</figcaption>
+    </figure>
+
+    <h3>1.2 Ações do Personagem Jogável e Comandos</h3>
+    <table>
+      <tr><th style="width:26%">Ação</th><th style="width:30%">Teclas</th><th>Efeito</th></tr>
+      <tr><td>Mover para esquerda</td><td><code>A</code> / <code>←</code></td><td>Aceleração horizontal negativa; sprite invertido</td></tr>
+      <tr><td>Mover para direita</td><td><code>D</code> / <code>→</code></td><td>Aceleração horizontal positiva; sprite normal</td></tr>
+      <tr><td>Salto</td><td><code>Espaço</code> / <code>W</code> / <code>↑</code></td><td>Impulso vertical (somente se estiver no chão)</td></tr>
+      <tr><td>Reacender tocha</td><td>Contato com fogueira ou tocha de parede</td><td>Transfere a chama e aumenta o raio luminoso</td></tr>
+      <tr><td>Reiniciar nível</td><td><code>R</code> (em Game Over / Vitória)</td><td>Recarrega a fase atual</td></tr>
+      <tr><td>Mudo / Som</td><td><code>M</code> (toggle)</td><td>Liga/desliga todos os sons</td></tr>
+    </table>
+
+    <h3>1.3 Heads-Up Display (HUD)</h3>
+    <table>
+      <tr><th style="width:28%">Componente</th><th style="width:26%">Posição</th><th>Atualização</th></tr>
+      <tr><td>Corações (vida)</td><td>Superior esquerdo (20,20)</td><td>Renderiza 0 a 3 sprites conforme <code>player.hp</code></td></tr>
+      <tr><td>Contador de chaves</td><td>Superior direito</td><td>Exibe "Chaves: N / Total"</td></tr>
+      <tr><td>Medidor da tocha</td><td>Abaixo do contador de chaves</td><td>Barra horizontal que encolhe conforme o combustível diminui (em todas as fases)</td></tr>
+      <tr><td>Mensagens didáticas</td><td>Centro superior</td><td>Caixas de diálogo com dicas de gameplay</td></tr>
+      <tr><td>Barra de vida do chefe</td><td>Centro inferior (Fase 3)</td><td>Barra vermelha proporcional ao HP da Sombra</td></tr>
+      <tr><td>Indicador de mudo</td><td>Superior direito</td><td>Ícone "🔇 MUDO (M)" quando o áudio está desligado</td></tr>
+    </table>
+
+    <h3>1.4 Itens, Coletáveis e Power-Ups</h3>
+    <table>
+      <tr><th>Item</th><th>Categoria</th><th>Efeito</th><th>Restrições</th></tr>
+      <tr><td>🔑 Chave Dourada</td><td>Missão</td><td>Incrementa o contador; revela fragmento de memória</td><td>Uso imediato; não ocupa inventário</td></tr>
+      <tr><td>❤️ Coração</td><td>Consumível</td><td>Restaura 1 coração (máx. 3)</td><td>Em locais fixos ou como recompensa de fogueira</td></tr>
+      <tr><td>🔥 Tocha do Herói</td><td>Mecânica nativa</td><td>Emissor de luz e arma ofensiva contra sombras</td><td>Decai com o tempo; reacende em fontes de fogo</td></tr>
+      <tr><td>🪵 Fogueira-Altar</td><td>Elemento estrutural</td><td>Acesa, cria zona de luz ampla que enfraquece inimigos</td><td>Imóvel; exige proximidade para acender</td></tr>
+    </table>
+    <p class="muted">Todos os itens usam caixas de colisão retangulares (AABB) e disparam o efeito quando interceptados pela caixa do jogador.</p>
+
+    <h3>1.5 Inteligência Artificial de NPCs</h3>
+    <table>
+      <tr><th>Nome</th><th>Comportamento</th><th>Estados (FSM)</th><th>Função no design</th></tr>
+      <tr><td>👻 Fantasma das Ruínas</td><td>Patrulha horizontal com oscilação vertical (seno)</td><td>PATRULHA / COLISÃO</td><td>Controla o ritmo em corredores estreitos</td></tr>
+      <tr><td>🦇 Morcego Sombrio</td><td>Voo elíptico (seno/cosseno); ignora colisões com blocos</td><td>VOO_ELÍPTICO / COLISÃO</td><td>Interrompe saltos entre plataformas</td></tr>
+      <tr><td>🌑 Mini-Sombra</td><td>Persegue no escuro; recua e sofre dano com a luz</td><td>PERSEGUIÇÃO / FUGA_LUZ / MORTE</td><td>Ensina que a luz causa dano</td></tr>
+      <tr><td>💀 A Sombra (Chefe)</td><td>Persegue agressivamente no escuro; foge e perde HP (85) quando exposta à luz</td><td>INVESTIDA / EVASÃO_LUZ / MORTE</td><td>Clímax narrativo; exige luz + mobilidade</td></tr>
+    </table>
+
+    <h3>1.6 Obstáculos e Elementos Interativos</h3>
+    <table>
+      <tr><th style="width:24%">Tipo</th><th>Descrição</th><th>Efeito</th></tr>
+      <tr><td>Plataformas de pedra</td><td>Superfícies sólidas (one-way em trechos verticais)</td><td>Permitem locomoção e saltos</td></tr>
+      <tr><td>Abismos / Vazios</td><td>Zonas sem colisão no fundo do mapa</td><td>Queda → −1 coração e respawn no checkpoint</td></tr>
+      <tr><td>Portais trancados</td><td>Saída da fase; abre só com todas as chaves (ou chefe derrotado)</td><td>Barreira que valida a exploração completa</td></tr>
+      <tr><td>Tochas de parede</td><td>Fontes fixas de luz que reabastecem a tocha do herói</td><td>Facilitam a progressão em trechos escuros</td></tr>
+      <tr><td>Fogueiras (apagadas)</td><td>Podem ser acesas com a tocha; criam luz duradoura</td><td>Enfraquecem inimigos e são essenciais contra o chefe</td></tr>
+    </table>
+
+    <h3>1.7 Saves do Jogo</h3>
+    <ul class="bul">
+      <li><strong>Persistência:</strong> apenas em memória volátil durante a sessão</li>
+      <li><strong>Checkpoints:</strong> coordenadas <code>safeX</code>/<code>safeY</code> atualizadas quando o jogador está em chão firme e longe de inimigos</li>
+      <li>Queda em abismo → reposicionamento no último checkpoint</li>
+      <li><strong>Sem salvamento em disco</strong> — progresso perdido ao fechar a página (save por fase via <code>localStorage</code> está previsto no roadmap)</li>
+    </ul>
+  </section>
+
+  <!-- 2. NARRATIVA -->
+  <section id="narrativa">
+    <div class="hsec"><span class="num">2.</span> Narrativa</div>
+    <div class="sublead">Enredo, tema, ambiente e personagens.</div>
+
+    <h3>2.1 Plot</h3>
+    <div class="quote">"Um guerreiro amnésico desperta em uma masmorra ancestral. Armado apenas com uma tocha vacilante, ele deve recuperar suas memórias, coletar chaves e enfrentar a entidade sombria que ele mesmo aprisionou no passado — antes que a escuridão o consuma de vez."</div>
+
+    <h3>2.2 Ideia-Controle</h3>
+    <p>A busca pela luz e pela verdade revela a realidade, mas também expõe o peso das consequências do passado. O percurso de fuga é, na verdade, uma jornada de aceitação da culpa e da responsabilidade pessoal.</p>
+    <div class="quote">"Para vencer a escuridão, é preciso primeiro reconhecer que ela habita dentro de si."</div>
+
+    <h3>2.3 Ambiente do Jogo</h3>
+    <ul class="bul">
+      <li><strong>Local:</strong> masmorra subterrânea de pedra, com ruínas, estalactites, pilares e névoa</li>
+      <li><strong>Tempo:</strong> indeterminado, com sensação de eternidade</li>
+      <li><strong>Clima:</strong> escuro, úmido, opressivo; a única fonte de calor e esperança é a chama da tocha</li>
+      <li><strong>Conflitos:</strong> o protagonista luta contra a própria memória e contra uma entidade que ele mesmo criou ao negar sua sombra interior</li>
+    </ul>
+
+    <h3>2.4 Incidente Incitante</h3>
+    <p>O despertar do guerreiro sem memórias no leito de pedra, sem saber quem é nem como chegou ali. A tocha acesa ao seu lado é o único elo com a realidade — e o primeiro passo para desvendar o mistério.</p>
+
+    <h3>2.5 Fluxo Narrativo</h3>
+    <figure class="fig">
+      <img src="img/grafico_ritmo.jpeg" alt="Gráfico de ritmo e tensão por fase"/>
+      <figcaption>Gráfico de ritmo — intensidade crescente por fase (3 → 6 → 9).</figcaption>
+    </figure>
+    <ul class="bul">
+      <li><strong>Exposição (Fase 1):</strong> o herói descobre que a masmorra guarda fragmentos de sua própria história</li>
+      <li><strong>Confronto (Fase 2):</strong> surgem as Mini-Sombras; diários sugerem ligação íntima entre a criatura e o avatar</li>
+      <li><strong>Clímax (Fase 3):</strong> a revelação — a Sombra é a personificação da escuridão que ele negou. Derrotá-la significa aceitar a própria culpa</li>
+    </ul>
+
+    <h3>2.6 Personagens</h3>
+    <table>
+      <tr><th style="width:26%">Personagem</th><th>Descrição</th></tr>
+      <tr><td>🗡️ O Guerreiro (Protagonista)</td><td>Amnésico, determinado; capuz, capa e olhar vazio. Atormentado por memórias fragmentadas, busca identidade e redenção. Valores: verdade, coragem, aceitação</td></tr>
+      <tr><td>💀 A Sombra (Antagonista)</td><td>Entidade escura no núcleo da masmorra; materialização da culpa e do passado negado. Foge da luz e ataca nas trevas. Representa o medo e o arrependimento</td></tr>
+      <tr><td>👻 Fantasmas / Morcegos</td><td>Habitantes-obstáculo da masmorra, sem personalidade definida — apenas instinto de ataque</td></tr>
+      <tr><td>🌑 Mini-Sombras</td><td>Criaturas menores que ensinam o jogador a usar a luz como arma; recuam e definham na chama</td></tr>
+    </table>
+    <h4>Design de Elenco</h4>
+    <ul class="clean">
+      <li>O Guerreiro busca a verdade → a Sombra esconde essa verdade</li>
+      <li>Fogueiras e tochas são aliados passivos que ajudam o herói</li>
+      <li>Inimigos comuns testam habilidades; a Sombra confronta o herói com seu maior medo</li>
+    </ul>
+  </section>
+
+  <!-- 3. ESTÉTICA -->
+  <section id="estetica">
+    <div class="hsec"><span class="num">3.</span> Estética</div>
+    <div class="sublead">Identidade visual, animações e sonorização.</div>
+
+    <h3>3.1 Arte Visual</h3>
+    <div class="cards">
+      <div class="mini"><h4>Estilo</h4><p>Minimalismo sombrio, alto contraste, texturas de pedra e iluminação procedural.</p></div>
+      <div class="mini"><h4>Atmosfera</h4><p>Claustrofóbica e opressiva, com áreas de escuridão total que geram tensão.</p></div>
+    </div>
+    <h4>Paleta de cores</h4>
+    <div class="swatch"><span class="sw" style="background:#000000"></span> Preto absoluto <code>#000000</code> — escuridão</div>
+    <div class="swatch"><span class="sw" style="background:#22252A"></span> Cinza-obsidiana <code>#22252A</code> — blocos</div>
+    <div class="swatch"><span class="sw" style="background:#1F1235"></span> Roxo profundo <code>#1F1235</code> — névoas</div>
+    <div class="swatch"><span class="sw" style="background:#FF7F27"></span> Âmbar <code>#FF7F27</code> — luz da tocha</div>
+
+    <h3>3.2 Animações</h3>
+    <ul class="bul">
+      <li><strong>Herói:</strong> ciclo de 4 frames de caminhada (pernas e capa); pisca-pisca na invulnerabilidade</li>
+      <li><strong>Tocha:</strong> chama oscilante (flicker) via ruído procedural</li>
+      <li><strong>Inimigos:</strong> fantasmas com transparência e flutuação senoidal; morcegos com batimento de asas; sombras com movimento de manto</li>
+      <li><strong>Efeitos:</strong> faíscas, vento (rajadas de partículas) e fogueiras com chamas dinâmicas</li>
+    </ul>
+
+    <h3>3.3 Músicas e Efeitos Sonoros</h3>
+    <p>Áudio em grande parte <strong>procedural</strong> via Web Audio API — nós de ganho independentes permitem modular o volume conforme a proximidade do perigo.</p>
+    <ul class="bul">
+      <li><strong>Drone de fundo:</strong> loop grave e monótono (sawtooth + sine) que induz claustrofobia</li>
+      <li><strong>Som de proximidade:</strong> sussurros do fantasma que aumentam de volume com a aproximação; guinchos de morcego com tremolo</li>
+      <li><strong>Efeitos:</strong> coleta de chave (arpejo ascendente), dano (ruído + impacto grave), reacender fogueira (chiado e "fwoom"), vento (ruído branco filtrado), boss (hits metálicos, morte com queda tonal)</li>
+      <li><strong>Masterização:</strong> compressor suave para evitar distorção; reverb curto para ambiência</li>
+    </ul>
+    <p class="muted"><strong>Justificativa de assets:</strong> a maior parte do áudio é gerada por código (zero licenciamento). O único arquivo externo é <code>ghost.mp3</code> ("ghostly voices" por ERH — CC BY 3.0), usado no sussurro espacial por aproximação à proposta de horror.</p>
+  </section>
+
+  <!-- 4. LEVEL DESIGN -->
+  <section id="level">
+    <div class="hsec"><span class="num">4.</span> Level Design</div>
+    <div class="sublead">Progressão de ritmo e detalhamento das fases.</div>
+
+    <h3>4.1 Gráfico de Ritmo</h3>
+    <table>
+      <tr><th>Fase</th><th>Inimigos</th><th>Obstáculos</th><th>Power-Ups</th><th>Mecânicas aprendidas</th><th>Narrativa</th></tr>
+      <tr><td><strong>Fase 1</strong></td><td>Fantasmas, morcegos</td><td>Abismos estreitos, plataformas fixas</td><td>Chaves, corações, tochas de parede</td><td>Movimento, salto, coletar chaves, reacender tocha</td><td>Despertar, primeiros fragmentos</td></tr>
+      <tr><td><strong>Fase 2</strong></td><td>Fantasmas, morcegos, mini-sombras</td><td>Trechos escuros, plataformas móveis</td><td>Chaves, corações, fogueiras</td><td>Luz ofensiva contra sombras; gestão de combustível</td><td>Conflito interno, revelações</td></tr>
+      <tr><td><strong>Fase 3</strong></td><td>A Sombra (chefe), morcegos</td><td>Arena fechada, vento apaga fogueiras</td><td>Fogueiras (essenciais)</td><td>Combate estratégico, priorizar acendimento</td><td>Clímax: aceitação da própria sombra</td></tr>
+    </table>
+
+    <h3>4.2 Fases e Level Design</h3>
+    <h4>Fase 1 — Despertar sem Nome</h4>
+    <ul class="bul">
+      <li><strong>Extensão:</strong> 4200 × 700 px</li>
+      <li><strong>Início:</strong> jogador no canto esquerdo (50, 490)</li>
+      <li><strong>Objetivo:</strong> coletar 4 chaves e alcançar a porta no extremo direito</li>
+      <li><strong>Elementos:</strong> plataformas ascendentes, fogueira de tutorial, tochas de parede espaçadas</li>
+      <li><strong>Inimigos:</strong> 6 fantasmas e 4 morcegos em patrulha</li>
+      <li><strong>Narrativa:</strong> textos ao longo do caminho que introduzem a amnésia</li>
+    </ul>
+    <h4>Fase 2 — A Sombra Cresce</h4>
+    <ul class="bul">
+      <li><strong>Extensão:</strong> 4200 × 700 px, com verticalidade (trajeto em "L" invertido)</li>
+      <li><strong>Objetivo:</strong> coletar 4 chaves</li>
+      <li><strong>Elementos:</strong> plataformas móveis, trechos sem tochas de parede (forçam o uso da luz), fogueiras em zonas escuras</li>
+      <li><strong>Inimigos:</strong> 3 fantasmas, 4 morcegos, 2 mini-sombras</li>
+      <li><strong>Narrativa:</strong> fragmentos de diários sugerem a ligação entre o herói e a Sombra</li>
+    </ul>
+    <h4>Fase 3 — O Que Eu Selei</h4>
+    <ul class="bul">
+      <li><strong>Arena:</strong> 1800 × 700 px (sem rolagem de câmera)</li>
+      <li><strong>Início:</strong> jogador na esquerda (150, 540)</li>
+      <li><strong>Objetivo:</strong> derrotar a Sombra</li>
+      <li><strong>Elementos:</strong> 4 fogueiras nos quadrantes; vento periódico que as apaga e reduz a tocha</li>
+      <li><strong>Chefe:</strong> A Sombra (HP 85) — persegue no escuro, foge e perde HP quando exposta à luz</li>
+      <li><strong>Revelação:</strong> ao ser derrotada, a Sombra diz: <em>"Você venceu... a si mesmo."</em></li>
+      <li><strong>Desfecho:</strong> a porta se abre; o jogador escapa e completa a jornada</li>
+    </ul>
+  </section>
+
+  <!-- BOAS PRÁTICAS -->
+  <section>
+    <div class="hsec">Boas Práticas de Game Design</div>
+    <div class="sublead">Princípios da disciplina evidenciados no jogo.</div>
+    <div class="callout c-tut"><b>🎓 Tutorial sem texto invasivo</b><span>A geografia ensina: degraus introduzem o salto, a fogueira no caminho ensina a luz, as Mini-Sombras ensinam que a luz fere — sem caixas de diálogo bloqueantes.</span></div>
+    <div class="callout c-flow"><b>🌊 Teoria do Fluxo (Flow)</b><span>Dificuldade calibrada (intensidade 3 → 6 → 9): cada competência é apresentada num ambiente seguro antes de virar desafio real.</span></div>
+    <div class="callout c-pos"><b>✨ Reforço positivo</b><span>Som e brilho ao coletar chaves, luz ampla ao acender fogueiras e checkpoints próximos que reduzem a frustração de quedas.</span></div>
+  </section>
+
+  <!-- 5. TECNOLOGIA -->
+  <section id="tecnologia">
+    <div class="hsec"><span class="num">5.</span> Tecnologia</div>
+    <div class="sublead">Ferramentas, motor e padrões de desenvolvimento.</div>
+    <table>
+      <tr><th style="width:32%">Categoria</th><th>Especificação</th></tr>
+      <tr><td>Ambiente de desenvolvimento</td><td>VS Code, Git/GitHub, documentação visual</td></tr>
+      <tr><td>Motor gráfico</td><td>Canvas 2D API nativa (sem bibliotecas externas)</td></tr>
+      <tr><td>Pipeline de iluminação</td><td><code>createRadialGradient</code> + <code>destination-out</code> para máscaras de luz</td></tr>
+      <tr><td>Áudio</td><td>Web Audio API com nós de ganho, filtros e compressor</td></tr>
+      <tr><td>Organização de código</td><td>POO em classes (Player, Enemy, Campfire, Boss, SoundManager)</td></tr>
+      <tr><td>Padrões</td><td>Código em inglês; comentários e documentação em português</td></tr>
+      <tr><td>Arquivos</td><td>Jogo em <code>index.html</code> único; áudio em <code>assets/sounds/</code></td></tr>
+    </table>
+  </section>
+
+  <!-- 6. REFERÊNCIAS -->
+  <section id="referencias">
+    <div class="hsec"><span class="num">6.</span> Referências e Inspirações</div>
+    <table>
+      <tr><th style="width:22%">Obra</th><th>Contribuição</th></tr>
+      <tr><td>Hollow Knight</td><td>Ambientação subterrânea sombria, estética melancólica, feedback sonoro preciso</td></tr>
+      <tr><td>Limbo</td><td>Silhuetas e iluminação de alto contraste para tensão</td></tr>
+      <tr><td>Don't Starve</td><td>Escuridão como ameaça ativa que exige gerenciamento de combustível</td></tr>
+      <tr><td>Celeste</td><td>Curva de aceleração responsiva em saltos, minimizando frustração</td></tr>
+      <tr><td>Áudio</td><td>"ghostly voices" por ERH (freesound.org/people/ERH/sounds/36757) — CC BY 3.0</td></tr>
+    </table>
+    <p class="muted">O High Concept do jogo acompanha este GDD como documento complementar.</p>
+  </section>
+
+  <!-- VISÃO DE FUTURO -->
+  <section id="futuro">
+    <div class="hsec">Visão de Futuro — Roadmap</div>
+    <div class="sublead">O que se espera das próximas versões do jogo.</div>
+    <div class="cards">
+      <div>
+        <h4>Estado atual (Gold)</h4>
+        <div class="prog"><div class="pl"><span>Mecânicas (física, luz, colisão)</span><span>92%</span></div><div class="pt"><div class="pf" style="width:92%"></div></div></div>
+        <div class="prog"><div class="pl"><span>Level Design (3 fases + boss)</span><span>88%</span></div><div class="pt"><div class="pf" style="width:88%"></div></div></div>
+        <div class="prog"><div class="pl"><span>Estética visual</span><span>85%</span></div><div class="pt"><div class="pf" style="width:85%"></div></div></div>
+        <div class="prog"><div class="pl"><span>Áudio</span><span>80%</span></div><div class="pt"><div class="pf" style="width:80%"></div></div></div>
+        <div class="prog"><div class="pl"><span>Narrativa</span><span>70%</span></div><div class="pt"><div class="pf" style="width:70%"></div></div></div>
+      </div>
+      <div>
+        <h4>Próximos passos</h4>
+        <ul class="clean">
+          <li>Save em <code>localStorage</code> por fase concluída</li>
+          <li>Menu inicial e tela de opções</li>
+          <li>Novos inimigos e variações do Chefe</li>
+          <li>Mais fases e um segundo ato narrativo</li>
+          <li>Polimento de arte e trilha original</li>
+          <li>Publicação em itch.io / Steam</li>
+        </ul>
+      </div>
+    </div>
+    <p class="muted" style="margin-top:18px;text-align:center;">Dungeon of Shadows — GDD Versão Final · SATC · Desenvolvimento de Jogos · 2026</p>
+  </section>
+
+</div>
+
+<a class="totop" href="#" title="Voltar ao topo">↑</a>
+</body>
+</html>
